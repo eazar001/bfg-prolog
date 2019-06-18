@@ -1,12 +1,30 @@
-use self::CellTag::{STR, REF};
+use self::Cell::*;
 use self::Mode::{Read, Write};
 use std::collections::HashMap;
 
 
+type HeapAddress = usize;
+
+type RegisterAddress = usize;
+
+type FunctorArity = usize;
+
+type FunctorName = String;
+
+#[derive(Debug, Clone)]
+pub struct Functor(FunctorName, FunctorArity);
+
+#[derive(Debug, Clone)]
+pub enum Cell {
+    Str(HeapAddress),
+    Ref(HeapAddress),
+    Func(Functor)
+}
+
 #[derive(Debug, Copy, Clone)]
-pub enum CellTag {
-    STR,
-    REF
+pub enum StoreAddress {
+    Heap(HeapAddress),
+    X(RegisterAddress)
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -15,226 +33,195 @@ pub enum Mode {
     Write
 }
 
-#[derive(Debug, Clone)]
-pub struct Cell {
-    cell_tag: Option<CellTag>,
-    cell_ref: Option<usize>,
-    functor: Option<Functor>
-}
-
-#[derive(Debug, Clone)]
-pub struct Functor {
-    name: String,
-    arity: usize
-}
-
+// the "global stack"
 #[derive(Debug, Clone)]
 pub struct Heap {
-    pub pointer: usize,
+    pub h: HeapAddress,
     pub cells: Vec<Cell>,
-    mode: Mode
+    mode: Mode,
+    fail: bool
 }
 
 #[derive(Debug, Clone)]
-pub struct Register {
+pub struct Registers {
     // variable register mapping heap location to cell data (x-register)
-    pub variable: HashMap<usize, Cell>,
-    pub variable_pointer: usize,
+    pub x: HashMap<RegisterAddress, Cell>,
     // subterm register containing heap address of next subterm to be matched (s-register)
-    pub subterm: usize
+    pub s: usize
 }
 
 #[derive(Debug, Clone)]
 pub struct Env {
     pub heap: Heap,
-    pub register: Register
+    pub registers: Registers
 }
 
 impl Env {
     pub fn new() -> Env {
         Env {
             heap: Heap::new(Vec::new()),
-            register: Register::new()
+            registers: Registers::new()
         }
     }
 
-    pub fn heap(&self) -> &Heap {
-        &self.heap
-    }
-
-    pub fn register(&self) -> &Register {
-        &self.register
-    }
-
-    pub fn heap_ptr(&self) -> &usize {
-        &self.heap.pointer
-    }
-
-    pub fn set_heap_ptr(&mut self, val: usize) {
-        self.heap.pointer = val;
-    }
-
+    // put_structure f/n, Xi
     #[allow(dead_code)]
-    pub fn put_structure(&mut self, register: usize, functor_cell: Cell, mut struct_cell: Cell) {
-        let h = self.heap.pointer;
+    pub fn put_structure(&mut self, functor: Functor, register: RegisterAddress) {
+        let h = &self.heap.h;
 
         // HEAP[H] <- <STR, H+1>
-        &struct_cell.set_ref(h + 1);
-        self.heap.cells.push(struct_cell);
+        self.heap.cells.push(Str(*h+1));
 
         // HEAP[H+1] <- f/n
-        self.heap.cells.push(functor_cell);
+        self.heap.cells.push(Cell::Func(functor));
 
         // Xi <- HEAP[H]
-        self.register.insert(register, self.heap.cells[h].clone());
+        self.registers.insert_x(register, self.heap.cells[*h].clone());
 
         // H <- H + 2
-        self.heap.pointer += 2;
+        self.heap.h += 2;
     }
 
+    // set_variable Xi
     #[allow(dead_code)]
-    pub fn set_variable(&mut self, register: usize, ref_cell: &Cell) {
-        let h = self.heap.pointer;
+    pub fn set_variable(&mut self, register: RegisterAddress) {
+        let h = &self.heap.h;
 
         // HEAP[H] <- <REF, H>
-        self.heap.cells.push(ref_cell.clone());
+        self.heap.cells.push(Ref(*h));
 
         // Xi <- HEAP[H]
-        self.register.insert(register, self.heap.cells[h].clone());
+        self.registers.insert_x(register, self.heap.cells[*h].clone());
 
         // H <- H + 1
-        self.heap.pointer += 1;
+        self.heap.h += 1;
     }
 
+    // set_value Xi
     #[allow(dead_code)]
-    pub fn set_value(&mut self, register: usize) {
+    pub fn set_value(&mut self, register: RegisterAddress) {
         // HEAP[H] <- Xi
-        self.heap.cells.push(self.register.get(register).unwrap().clone());
+        self.heap.cells.push(self.registers.get_x(register).unwrap().clone());
 
         // H <- H + 1
-        self.heap.pointer += 1;
+        self.heap.h += 1;
     }
 
     // TODO: Make this iterative
     #[allow(dead_code)]
-    fn deref(address: usize, store: &mut impl Store) -> usize {
-        let cell: (CellTag, usize) = match store.get(address) {
-            Some(cell) => (cell.cell_tag.unwrap(), cell.cell_ref.unwrap()),
-            None => panic!("No cell value")
+    pub fn deref(&self, address: StoreAddress) -> StoreAddress {
+        let cell = match address {
+            StoreAddress::Heap(addr) => &self.heap.cells[addr],
+            StoreAddress::X(addr) => self.registers.get_x(addr).unwrap()
         };
 
-        match cell {
-            (REF, value) => {
+        let address = match address {
+            StoreAddress::Heap(addr) => addr,
+            StoreAddress::X(addr) => addr
+        };
+
+        match *cell {
+            Ref(value) => {
                 if value != address {
-                    Self::deref(value, store)
+                    self.deref(StoreAddress::Heap(value))
                 } else {
-                    address
+                    StoreAddress::Heap(address)
                 }
             },
-            (STR, _) => address
+            Str(_) => StoreAddress::Heap(address),
+            Func(_) => StoreAddress::Heap(address)
         }
     }
 
+    // get_structure f/n, Xi
     #[allow(dead_code)]
-    pub fn get_structure(&mut self, functor: Functor, register: usize, store: &impl Store) -> bool {
-        let address = Self::deref(register, &mut self.register);
+    pub fn get_structure(&mut self, functor: Functor, register: usize) {
+        let (cell, address) = match self.deref(StoreAddress::X(register)) {
+            StoreAddress::Heap(addr) => (&self.heap.cells[addr], addr),
+            StoreAddress::X(addr) => (self.registers.get_x(register).unwrap(), addr),
+        };
 
-        let cell = store.get(address).unwrap();
+        match *cell {
+            Ref(_) => {
+                let h = &self.heap.h;
 
-        match (cell.cell_tag.unwrap(), cell.cell_ref) {
-            (REF, _) => {
-                let h = self.heap.pointer;
+                self.heap.cells.push(Str(*h+1));
+                self.heap.cells.push(Func(functor));
+                Self::bind(address, *h);
 
-                self.heap.cells.push(Cell::new(STR, h + 1));
-                self.heap.cells.push(Cell::new_functor(functor));
-                Self::bind(address, h);
-
-                self.heap.pointer += 2;
+                self.heap.h += 2;
                 self.heap.mode = Write;
             },
+            Str(a) => {
+                match &self.heap.cells[a] {
+                    Func(Functor(s_name, s_arity)) => {
+                        let Functor(f_name, f_arity) = functor;
 
-            (STR, Some(a)) => {
-                let name = functor.name;
-                let arity = functor.arity;
-                let heap_a_cell = self.heap.get(a).cloned().unwrap().clone();
-                let heap_a_functor = heap_a_cell.functor.unwrap();
-                let f_name = &heap_a_functor.name;
-                let f_arity = &heap_a_functor.arity;
-
-                if *f_name == name && *f_arity == arity {
-                    self.register.subterm += 1;
-                    self.heap.mode = Read;
-                } else {
-                    return false
+                        if *s_name == f_name && *s_arity == f_arity {
+                            self.registers.s += 1;
+                            self.heap.mode = Read;
+                        } else {
+                            self.heap.fail = true;
+                        }
+                    }
+                    _ => {
+                        self.heap.fail = true;
+                    }
                 }
-            },
-
-            _ => return false
+            }
+            Func(_) => {
+                self.heap.fail = true;
+            }
         }
-
-        true
     }
 
+    // unify_variable Xi
     #[allow(dead_code)]
-    pub fn unify_variable(&mut self, cell: Cell, slot: usize, h: usize, mode: Mode) {
-        match mode {
+    pub fn unify_variable(&mut self, register: RegisterAddress) {
+        match self.heap.mode {
             Read => {
-                self.register.insert(slot, self.heap.cells[h].clone());
+                let s = &self.registers.s;
+                let cell = self.heap.cells[*s].clone();
+
+                self.registers.insert_x(register, cell);
             },
             Write => {
-                self.heap.cells[h] = cell;
-                self.register.insert(slot, self.heap.cells[h].clone());
-                self.heap.pointer += 1;
+                let h = &self.heap.h;
+
+                self.heap.cells.push(Ref(*h));
+                self.registers.insert_x(register, self.heap.cells[*h].clone());
+                self.heap.h += 1;
             }
         }
 
-        self.register.subterm += 1;
+        self.registers.s += 1;
     }
 
+    // unify_value Xi
     #[allow(dead_code)]
-    fn unify_value(&mut self, register: usize, h: usize, s: usize, mode: Mode) {
-        match mode {
-            Read => self.unify(register, s), //Self::unify(register, s),
+    fn unify_value(&mut self, register: RegisterAddress) {
+        match self.heap.mode {
+            Read => {
+                let s = self.registers.s;
+                self.unify(register, s)
+            },
             Write => {
-                self.heap.cells[h] = self.register.variable.get(&register).unwrap().clone();
-                self.heap.pointer += 1;
+                self.heap.cells.push(self.registers.get_x(register).unwrap().clone());
+                self.heap.h += 1;
             }
         }
 
-        self.register.subterm += 1;
+        self.registers.s += 1;
     }
 
     #[allow(dead_code)]
-    fn bind(address: usize, heap_address: usize) {
+    fn bind(_address: usize, _heap_address: usize) {
         unimplemented!()
     }
 
     #[allow(dead_code)]
-    fn unify(&mut self, register: usize, s: usize) {
+    fn unify(&mut self, _register: usize, _s: usize) {
         unimplemented!()
-    }
-}
-
-impl Cell {
-    pub fn new(cell_tag: CellTag, cell_ref: usize) -> Cell {
-        Cell {
-            cell_tag: Some(cell_tag),
-            cell_ref: Some(cell_ref),
-            functor: None
-        }
-    }
-
-    pub fn new_functor(functor: Functor) -> Cell {
-        Cell {
-            cell_tag: None,
-            cell_ref: None,
-            functor: Some(functor)
-        }
-    }
-
-    pub fn set_ref(&mut self, cell_ref: usize) -> &Self {
-        self.cell_ref = Some(cell_ref);
-        self
     }
 }
 
@@ -242,45 +229,40 @@ pub trait Store {
     fn get(&self, slot: usize) -> Option<&Cell>;
 }
 
-impl<'a> Register {
-    pub fn new() -> Register {
-        Register {
-            variable: HashMap::new(),
-            variable_pointer: 0,
-            subterm: 0
+impl Registers {
+    pub fn new() -> Registers {
+        Registers {
+            x: HashMap::new(),
+            s: 0
         }
     }
 
-    pub fn insert(&mut self, slot: usize, cell: Cell) -> Option<Cell> {
-        self.variable.insert(slot, cell)
+    pub fn get_x(&self, register: RegisterAddress) -> Option<&Cell> {
+        self.x.get(&register)
+    }
+
+    pub fn insert_x(&mut self, register: RegisterAddress, cell: Cell) -> Option<Cell> {
+        self.x.insert(register, cell)
     }
 }
 
-impl<'a> Store for Register {
-    fn get(&self, slot: usize) -> Option<&Cell> {
-        self.variable.get(&slot).map(|cell| cell)
-    }
-}
-
-impl<'a> Heap {
+impl Heap {
     pub fn new(heap: Vec<Cell>) -> Heap {
         Heap {
-            pointer: 0,
+            h: 0,
             cells: heap,
-            mode: Read
+            mode: Read,
+            fail: false
         }
-    }
-}
-
-impl<'a> Store for Heap {
-    fn get(&self, slot: usize) -> Option<&Cell> {
-        Some(&self.cells[slot])
     }
 }
 
 
 fn main() {
-    let env = Env::new();
+    let mut env = Env::new();
+
+    env.put_structure(Functor(String::from("Name"), 0), 0);
+    env.put_structure(Functor(String::from("Foo"), 0), 0);
 
     println!("{:?}", env);
 }
