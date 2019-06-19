@@ -361,21 +361,25 @@ mod tests {
 
     #[test]
     fn test_m0_1() {
-        // p(Z, h(Z, W), f(W))
+        // L0 program: p(Z, h(Z, W), f(W)).
         let mut env = Env::new();
 
+        let h = String::from("h");
+        let f = String::from("f");
+        let p = String::from("p");
+
         // put_structure h/2, x3
-        env.put_structure(Functor(String::from("h"), 2), 2);
+        env.put_structure(Functor(h.clone(), 2), 2);
         // set_variable, x2
         env.set_variable(1);
         // set_variable, x5
         env.set_variable(4);
         // put_structure f/1, x4
-        env.put_structure(Functor(String::from("f"), 1), 3);
+        env.put_structure(Functor(f.clone(), 1), 3);
         // set_value, x5
         env.set_value(4);
         // put_structure p/3, x1
-        env.put_structure(Functor(String::from("p"), 3), 0);
+        env.put_structure(Functor(p.clone(), 3), 0);
         // set_value x2
         env.set_value(1);
         // set_value x3
@@ -383,9 +387,7 @@ mod tests {
         // set_value x4
         env.set_value(3);
 
-        let h = String::from("h");
-        let f = String::from("f");
-        let p = String::from("p");
+
 
         let expected_heap_cells = vec![
             Str(1),
@@ -402,13 +404,53 @@ mod tests {
             Str(5),
         ];
 
-        let (heap_cells, registers) = (env.heap.cells, env.registers);
+        let (heap_cells, registers) = (env.heap.cells, &env.registers);
         assert_eq!(heap_cells, expected_heap_cells);
 
-        assert_eq!(registers.get_x(0).cloned().unwrap(), Str(8));
-        assert_eq!(registers.get_x(1).cloned().unwrap(), Ref(2));
-        assert_eq!(registers.get_x(2).cloned().unwrap(), Str(1));
-        assert_eq!(registers.get_x(3).cloned().unwrap(), Str(5));
-        assert_eq!(registers.get_x(4).cloned().unwrap(), Ref(3));
+        register_is(registers,0, Str(8));
+        register_is(registers,1, Ref(2));
+        register_is(registers,2, Str(1));
+        register_is(registers,3, Str(5));
+        register_is(registers,4, Ref(3));
+    }
+
+    #[test]
+    fn test_m0_2() {
+        // L0 Program: p(f(X), h(Y, f(a)), Y).
+        let mut env = Env::new();
+
+        let h = String::from("h");
+        let f = String::from("f");
+        let p = String::from("p");
+        let a = String::from("a");
+
+        // get_structure p/3, x1
+        env.get_structure(Functor(p.clone(), 3), 0);
+        // unify_variable x2
+        env.unify_variable(1);
+        // unify_variable x3
+        env.unify_variable(2);
+        // unify_variable x4
+        env.unify_variable(3);
+        // get_structure f/1, x2
+        env.get_structure(Functor(f.clone(), 1), 1);
+        // unify_variable x5
+        env.unify_variable(4);
+        // get_structure h/2, x3
+        env.get_structure(Functor(h.clone(), 1), 2);
+        // unify_value x4
+        env.unify_value(3);
+        // unify_variable x6
+        env.unify_variable(5);
+        // get_structure f/1, x6
+        env.get_structure(Functor(f.clone(), 1), 5);
+        // unify_variable x7
+        env.unify_variable(6);
+        // get_structure a/0, x7
+        env.get_structure(Functor(a.clone(), 0), 6);
+    }
+
+    fn register_is(registers: &Registers, register: RegisterAddress, cell: Cell) {
+        assert_eq!(registers.get_x(register).cloned().unwrap(), cell);
     }
 }
