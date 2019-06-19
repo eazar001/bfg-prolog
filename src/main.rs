@@ -107,29 +107,30 @@ impl Env {
         self.heap.h += 1;
     }
 
-    // TODO: Make this iterative
     #[allow(dead_code)]
-    pub fn deref(&self, address: StoreAddress) -> StoreAddress {
-        let cell = match address {
-            StoreAddress::Heap(addr) => &self.heap.cells[addr],
-            StoreAddress::X(addr) => self.registers.get_x(addr).unwrap()
-        };
+    pub fn deref(&self, mut address: StoreAddress) -> StoreAddress {
+        loop {
+            let cell = match address {
+                StoreAddress::Heap(addr) => &self.heap.cells[addr],
+                StoreAddress::X(addr) => self.registers.get_x(addr).unwrap()
+            };
 
-        let address = match address {
-            StoreAddress::Heap(addr) => addr,
-            StoreAddress::X(addr) => addr
-        };
+            let a = match address {
+                StoreAddress::Heap(addr) => addr,
+                StoreAddress::X(addr) => addr
+            };
 
-        match *cell {
-            Ref(value) => {
-                if value != address {
-                    self.deref(StoreAddress::Heap(value))
-                } else {
-                    StoreAddress::Heap(address)
-                }
-            },
-            Str(_) => StoreAddress::Heap(address),
-            Func(_) => StoreAddress::Heap(address)
+            match *cell {
+                Ref(value) => {
+                    if value != a {
+                        address = StoreAddress::Heap(a);
+                    } else {
+                        return StoreAddress::Heap(a)
+                    }
+                },
+                Str(_) => return StoreAddress::Heap(a),
+                Func(_) => return StoreAddress::Heap(a)
+            }
         }
     }
 
@@ -261,8 +262,8 @@ impl Heap {
 fn main() {
     let mut env = Env::new();
 
-    env.put_structure(Functor(String::from("Name"), 0), 0);
-    env.put_structure(Functor(String::from("Foo"), 0), 0);
+    env.put_structure(Functor(String::from("name"), 0), 0);
+    env.put_structure(Functor(String::from("foo"), 2), 0);
 
     println!("{:?}", env);
 }
