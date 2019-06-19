@@ -123,7 +123,7 @@ impl Env {
             match *cell {
                 Ref(value) => {
                     if value != a {
-                        address = StoreAddress::Heap(a);
+                        address = StoreAddress::Heap(value);
                     } else {
                         return StoreAddress::Heap(a)
                     }
