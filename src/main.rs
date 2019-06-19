@@ -8,10 +8,10 @@ type RegisterAddress = usize;
 type FunctorArity = usize;
 type FunctorName = String;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 struct Functor(FunctorName, FunctorArity);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 enum Cell {
     Str(HeapAddress),
     Ref(HeapAddress),
@@ -24,14 +24,14 @@ enum StoreAddress {
     X(RegisterAddress)
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 enum Mode {
     Read,
     Write
 }
 
 // the "global stack"
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 struct Heap {
     // the "h" counter contains the location of the next cell to be pushed onto the heap
     h: HeapAddress,
@@ -40,7 +40,7 @@ struct Heap {
     mode: Mode
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 struct Registers {
     // variable register mapping a variable to cell data (x-register)
     x: HashMap<RegisterAddress, Cell>,
@@ -48,7 +48,7 @@ struct Registers {
     s: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 struct Env {
     heap: Heap,
     // the "push-down-list" contains StoreAddresses and serves as a unification stack
@@ -349,10 +349,66 @@ impl Heap {
 
 
 fn main() {
-    let mut env = Env::new();
+    let env = Env::new();
 
-    env.put_structure(Functor(String::from("name"), 0), 0);
-    env.put_structure(Functor(String::from("foo"), 2), 0);
+    println!("init: {:?}", env);
+}
 
-    println!("{:?}", env);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_m0_1() {
+        // p(Z, h(Z, W), f(W))
+        let mut env = Env::new();
+
+        // put_structure h/2, x3
+        env.put_structure(Functor(String::from("h"), 2), 2);
+        // set_variable, x2
+        env.set_variable(1);
+        // set_variable, x5
+        env.set_variable(4);
+        // put_structure f/1, x4
+        env.put_structure(Functor(String::from("f"), 1), 3);
+        // set_value, x5
+        env.set_value(4);
+        // put_structure p/3, x1
+        env.put_structure(Functor(String::from("p"), 3), 0);
+        // set_value x2
+        env.set_value(1);
+        // set_value x3
+        env.set_value(2);
+        // set_value x4
+        env.set_value(3);
+
+        let h = String::from("h");
+        let f = String::from("f");
+        let p = String::from("p");
+
+        let expected_heap_cells = vec![
+            Str(1),
+            Func(Functor(h, 2)),
+            Ref(2),
+            Ref(3),
+            Str(5),
+            Func(Functor(f, 1)),
+            Ref(3),
+            Str(8),
+            Func(Functor(p, 3)),
+            Ref(2),
+            Str(1),
+            Str(5),
+        ];
+
+        let (heap_cells, registers) = (env.heap.cells, env.registers);
+        assert_eq!(heap_cells, expected_heap_cells);
+
+        assert_eq!(registers.get_x(0).cloned().unwrap(), Str(8));
+        assert_eq!(registers.get_x(1).cloned().unwrap(), Ref(2));
+        assert_eq!(registers.get_x(2).cloned().unwrap(), Str(1));
+        assert_eq!(registers.get_x(3).cloned().unwrap(), Str(5));
+        assert_eq!(registers.get_x(4).cloned().unwrap(), Ref(3));
+    }
 }
