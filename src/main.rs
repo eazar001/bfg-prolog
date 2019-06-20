@@ -157,7 +157,7 @@ impl Env {
     fn get_structure(&mut self, functor: Functor, register: usize) {
         let (cell, address) = match self.deref(StoreAddress::X(register)) {
             StoreAddress::Heap(addr) => (&self.heap.cells[addr], addr),
-            StoreAddress::X(addr) => (self.registers.get_x(register).unwrap(), addr),
+            StoreAddress::X(addr) => (self.registers.get_x(addr).unwrap(), addr),
         };
 
         match *cell {
@@ -395,6 +395,7 @@ mod tests {
         assert_eq!(registers.x.len(), 2);
     }
 
+    // put_structure f/n, Xi
     #[test]
     fn test_put_structure() {
         let mut env = Env::new();
