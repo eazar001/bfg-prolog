@@ -359,6 +359,69 @@ fn main() {
 mod tests {
     use super::*;
 
+    // set_variable Xi
+    #[test]
+    fn test_set_variable() {
+        let mut env = Env::new();
+
+        env.set_variable(0);
+
+        let expected_heap_cells = vec![Ref(0)];
+        let heap_cells = env.heap.cells;
+        let registers = env.registers;
+
+        assert_eq!(heap_cells, expected_heap_cells);
+        register_is(&registers, 0, Ref(0));
+    }
+
+    // set_value Xi
+    #[test]
+    fn test_set_value() {
+        let mut env = Env::new();
+
+        env.set_variable(0);
+        env.set_variable(1);
+
+        env.set_value(0);
+        env.set_value(1);
+
+        let expected_heap_cells = vec![Ref(0), Ref(1), Ref(0), Ref(1)];
+        let heap_cells = env.heap.cells;
+        let registers = env.registers;
+
+        assert_eq!(heap_cells, expected_heap_cells);
+        register_is(&registers, 0, Ref(0));
+        register_is(&registers, 1, Ref(1));
+        assert_eq!(registers.x.len(), 2);
+    }
+
+    #[test]
+    fn test_put_structure() {
+        let mut env = Env::new();
+
+        env.put_structure(Functor(String::from("foo"), 2), 0);
+        env.set_variable(2);
+        env.set_variable(3);
+        env.set_value(2);
+
+        let expected_heap_cells = vec![
+            Str(1),
+            Func(Functor(String::from("foo"), 2)),
+            Ref(2),
+            Ref(3),
+            Ref(2)
+        ];
+
+        let heap_cells = env.heap.cells;
+        let registers = env.registers;
+
+        assert_eq!(heap_cells, expected_heap_cells);
+        register_is(&registers, 0, Str(1));
+        register_is(&registers, 2, Ref(2));
+        register_is(&registers, 3, Ref(3));
+        assert_eq!(registers.x.len(), 3);
+    }
+
     #[test]
     fn test_m0_1() {
         // L0 program: p(Z, h(Z, W), f(W)).
@@ -388,7 +451,6 @@ mod tests {
         env.set_value(3);
 
 
-
         let expected_heap_cells = vec![
             Str(1),
             Func(Functor(h, 2)),
@@ -414,6 +476,7 @@ mod tests {
         register_is(registers,4, Ref(3));
     }
 
+    #[ignore]
     #[test]
     fn test_m0_2() {
         // L0 Program: p(f(X), h(Y, f(a)), Y).
