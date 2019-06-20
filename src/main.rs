@@ -173,10 +173,8 @@ impl Env {
             },
             Str(a) => {
                 match &self.heap.cells[a] {
-                    Func(Functor(s_name, s_arity)) => {
-                        let Functor(f_name, f_arity) = functor;
-
-                        if *s_name == f_name && *s_arity == f_arity {
+                    Func(s_functor) => {
+                        if s_functor == &functor {
                             self.registers.s += 1;
                             self.heap.mode = Read;
                         } else {
@@ -187,7 +185,7 @@ impl Env {
                         self.fail = true;
                     }
                 }
-            }
+            },
             Func(_) => {
                 self.fail = true;
             }
@@ -269,10 +267,8 @@ impl Env {
                         let f1 = self.get_functor(c1);
                         let f2 = self.get_functor(c2);
 
-                        let Functor(f1_name, f1_arity) = f1;
-                        let Functor(f2_name, f2_arity) = f2;
-
-                        if f1_name == f2_name && f1_arity == f2_arity {
+                        if &f1 == &f2 {
+                            let Functor(_, f1_arity) = f1;
                             for i in 1..f1_arity+1 {
                                 self.push_pdl(StoreAddress::Heap(v1+i));
                                 self.push_pdl(StoreAddress::Heap(v2+i));
@@ -341,20 +337,22 @@ impl Env {
                 self.heap.cells[a1] = c2.clone();
                 self.trail(a1);
             } else {
-                self.registers.insert_x(a1, c2.clone());
+                let c2 = c2.clone();
+                self.registers.insert_x(a1, c2);
             }
         } else {
             if c2_heap {
                 self.heap.cells[a2] = c1.clone();
                 self.trail(a2);
             } else {
-                self.registers.insert_x(a2, c1.clone());
+                let c1 = c1.clone();
+                self.registers.insert_x(a2, c1);
             }
         }
     }
 
     #[allow(dead_code)]
-    fn trail(&self, a: HeapAddress) {
+    fn trail(&self, _a: HeapAddress) {
         unimplemented!()
     }
 }
@@ -551,6 +549,20 @@ mod tests {
         env.unify_variable(6);
         // get_structure a/0, x7
         env.get_structure(Functor(a.clone(), 0), 6);
+    }
+
+    #[test]
+    fn test_functor_eq() {
+        let f1 = Functor(String::from("foo"), 1);
+        let f2 = Functor(String::from("bar"), 1);
+
+        assert_ne!(f1, f2);
+
+        let f2 = Functor(String::from("foo"), 1);
+        assert_eq!(f1, f2);
+
+        let f2 = Functor(String::from("foo"), 2);
+        assert_ne!(f1, f2);
     }
 
     fn register_is(registers: &Registers, register: RegisterAddress, cell: Cell) {
