@@ -162,11 +162,11 @@ impl Env {
 
         match *cell {
             Ref(_) => {
-                let h = &self.heap.h;
+                let h = self.heap.h;
 
-                self.heap.cells.push(Str(*h+1));
+                self.heap.cells.push(Str(h+1));
                 self.heap.cells.push(Func(functor));
-                Self::bind(StoreAddress::Heap(address), StoreAddress::Heap(*h));
+                self.bind(StoreAddress::Heap(address), StoreAddress::Heap(h));
 
                 self.heap.h += 2;
                 self.heap.mode = Write;
@@ -263,8 +263,8 @@ impl Env {
                 };
 
                 match (c1, c2) {
-                    (Ref(_), _) => Self::bind(d1, d2),
-                    (_, Ref(_)) => Self::bind(d1, d2),
+                    (Ref(_), _) => self.bind(d1, d2),
+                    (_, Ref(_)) => self.bind(d1, d2),
                     _ => {
                         let f1 = self.get_functor(c1);
                         let f2 = self.get_functor(c2);
@@ -315,7 +315,46 @@ impl Env {
     }
 
     #[allow(dead_code)]
-    fn bind(_address: StoreAddress, _heap_address: StoreAddress) {
+    fn bind(&mut self, a1: StoreAddress, a2: StoreAddress) {
+        let (c1, a1, c1_heap) = match a1 {
+            StoreAddress::Heap(addr) => (&self.heap.cells[addr], addr, true),
+            StoreAddress::X(addr) => (self.registers.get_x(addr).unwrap(), addr, false)
+        };
+
+        let (c2, a2, c2_heap) = match a2 {
+            StoreAddress::Heap(addr) => (&self.heap.cells[addr], addr, true),
+            StoreAddress::X(addr) => (self.registers.get_x(addr).unwrap(), addr, false)
+        };
+
+        let c1_is_ref = match c1 {
+            Ref(_) => true,
+            _ => false
+        };
+
+        let c2_is_ref = match c2 {
+            Ref(_) => true,
+            _ => false
+        };
+
+        if c1_is_ref && (!c2_is_ref || a2 < a1) {
+            if c1_heap {
+                self.heap.cells[a1] = c2.clone();
+                self.trail(a1);
+            } else {
+                self.registers.insert_x(a1, c2.clone());
+            }
+        } else {
+            if c2_heap {
+                self.heap.cells[a2] = c1.clone();
+                self.trail(a2);
+            } else {
+                self.registers.insert_x(a2, c1.clone());
+            }
+        }
+    }
+
+    #[allow(dead_code)]
+    fn trail(&self, a: HeapAddress) {
         unimplemented!()
     }
 }
