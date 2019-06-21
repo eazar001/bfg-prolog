@@ -39,8 +39,6 @@ enum Mode {
 // the "global stack"
 #[derive(Debug, Clone, Eq, PartialEq)]
 struct Heap {
-    // the "h" counter contains the location of the next cell to be pushed onto the heap
-    h: HeapAddress,
     // all the data that resides on the heap
     cells: Vec<Cell>,
     mode: Mode
@@ -48,6 +46,8 @@ struct Heap {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 struct Registers {
+    // the "h" counter contains the location of the next cell to be pushed onto the heap
+    h: HeapAddress,
     // variable register mapping a variable to cell data (x-register)
     x: HashMap<Register, Cell>,
     // subterm register containing heap address of next subterm to be matched (s-register)
@@ -113,12 +113,16 @@ impl Env {
         self.registers.s += value;
     }
 
+    fn set_s(&mut self, value: usize) {
+        self.registers.s = value;
+    }
+
     fn heap_counter(&self) -> usize {
-        self.heap.h
+        self.registers.h
     }
 
     fn inc_heap_counter(&mut self, value: usize) {
-        self.heap.h += value;
+        self.registers.h += value;
     }
 
     fn set_mode(&mut self, mode: Mode) {
@@ -171,12 +175,10 @@ impl Env {
 
     // set_value Xi
     fn set_value(&mut self, register: Register) {
+        let e = &format!("Illegal access: register {}, does not exist", register);
+
         // HEAP[H] <- Xi
-        self.push_heap(
-            self.get_x(register)
-                .expect(&format!("Illegal access: register {}, does not exist", register))
-                .clone()
-        );
+        self.push_heap(self.get_x(register).expect(e).clone());
 
         // H <- H + 1
         self.inc_heap_counter(1);
@@ -187,8 +189,8 @@ impl Env {
             let (cell, a) = match address {
                 HeapAddr(addr) => (&self.heap.cells[addr], addr),
                 XAddr(addr) => {
-                    let c = self.get_x(addr)
-                        .expect(&format!("Illegal access: register {}, does not exist", addr));
+                    let e = &format!("Illegal access: register {}, does not exist", addr);
+                    let c = self.get_x(addr).expect(e);
 
                     (c, addr)
                 }
@@ -207,7 +209,7 @@ impl Env {
     }
 
     // get_structure f/n, Xi
-    fn get_structure(&mut self, functor: Functor, register: usize) {
+    fn get_structure(&mut self, functor: Functor, register: Register) {
         let (cell, address) = match self.deref(XAddr(register)) {
             HeapAddr(addr) => (&self.heap.cells[addr], addr),
             XAddr(addr) => (self.registers.get_x(addr).unwrap(), addr),
@@ -228,7 +230,7 @@ impl Env {
                 match &self.heap.cells[a] {
                     Func(s_functor) => {
                         if s_functor == &functor {
-                            self.inc_s(1);
+                            self.set_s(a+1);
                             self.set_mode(Read);
                         } else {
                             self.fail = true;
@@ -250,15 +252,14 @@ impl Env {
         match self.heap.mode {
             Read => {
                 let s = self.get_s();
-                let cell = self.heap.cells[s].clone();
 
-                self.insert_x(register, cell);
+                self.insert_x(register, self.heap.cells[s].clone());
             },
             Write => {
                 let h = self.heap_counter();
 
                 self.push_heap(Ref(h));
-                self.insert_x(register, self.heap.cells[h].clone());
+                self.insert_x(register, Ref(h));
                 self.inc_heap_counter(1);
             }
         }
@@ -271,10 +272,11 @@ impl Env {
         match self.heap.mode {
             Read => {
                 let s = self.get_s();
+
                 self.unify(XAddr(register), HeapAddr(s))
             },
             Write => {
-                self.push_heap(self.registers.get_x(register).unwrap().clone());
+                self.push_heap(self.get_x(register).unwrap().clone());
                 self.inc_heap_counter(1);
             }
         }
@@ -406,6 +408,7 @@ impl Env {
 impl Registers {
     fn new() -> Registers {
         Registers {
+            h: 0,
             x: HashMap::new(),
             s: 0
         }
@@ -423,7 +426,6 @@ impl Registers {
 impl Heap {
     fn new() -> Heap {
         Heap {
-            h: 0,
             cells: Vec::new(),
             mode: Read
         }
