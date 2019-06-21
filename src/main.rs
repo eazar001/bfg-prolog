@@ -1,6 +1,7 @@
 use self::Cell::*;
 use self::Mode::{Read, Write};
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
 
 
 type HeapAddress = usize;
@@ -55,6 +56,22 @@ struct Env {
     pdl: Vec<StoreAddress>,
     registers: Registers,
     fail: bool,
+}
+
+impl Display for Functor {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
+        Ok(write!(f, "{}/{}", self.name(), self.arity())?)
+    }
+}
+
+impl Functor {
+    fn name(&self) -> &str {
+        &self.0
+    }
+
+    fn arity(&self) -> usize {
+        self.1
+    }
 }
 
 impl Env {
