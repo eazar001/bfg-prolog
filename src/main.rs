@@ -4,7 +4,9 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 
 
+// heap address represented as usize that corresponds to the vector containing cell data
 type HeapAddress = usize;
+// x-register address which is identifies the register that holds the cell data in the corresponding variable
 type RegisterAddress = usize;
 type FunctorArity = usize;
 type FunctorName = String;
@@ -455,9 +457,9 @@ mod tests {
         let mut env = Env::new();
 
         env.put_structure(Functor(String::from("foo"), 2), 0);
+        env.set_variable(1);
         env.set_variable(2);
-        env.set_variable(3);
-        env.set_value(2);
+        env.set_value(1);
 
         let expected_heap_cells = vec![
             Str(1),
@@ -472,8 +474,8 @@ mod tests {
 
         assert_eq!(heap_cells, expected_heap_cells);
         register_is(&registers, 0, Str(1));
-        register_is(&registers, 2, Ref(2));
-        register_is(&registers, 3, Ref(3));
+        register_is(&registers, 1, Ref(2));
+        register_is(&registers, 2, Ref(3));
         assert_eq!(registers.x.len(), 3);
     }
 
