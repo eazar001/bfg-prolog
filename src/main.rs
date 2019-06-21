@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use self::Cell::*;
 use self::Store::*;
 use self::Mode::{Read, Write};
@@ -87,74 +89,105 @@ impl Env {
         }
     }
 
-    #[allow(dead_code)]
+    fn push_heap(&mut self, cell: Cell) {
+        self.heap.cells.push(cell);
+    }
+
+    fn push_foo(cells: &mut Vec<Cell>, cell: Cell) {
+        cells.push(cell);
+    }
+
+    fn get_x(&self, register: Register) -> Option<&Cell> {
+        self.registers.get_x(register)
+    }
+
+    fn insert_x(&mut self, register: Register, cell: Cell) -> Option<Cell> {
+        self.registers.insert_x(register, cell)
+    }
+
+    fn get_s(&self) -> Register {
+        self.registers.s
+    }
+
+    fn inc_s(&mut self, value: usize) {
+        self.registers.s += value;
+    }
+
+    fn heap_counter(&self) -> usize {
+        self.heap.h
+    }
+
+    fn inc_heap_counter(&mut self, value: usize) {
+        self.heap.h += value;
+    }
+
+    fn set_mode(&mut self, mode: Mode) {
+        self.heap.mode = mode;
+    }
+
     fn empty_pdl(&mut self) -> bool {
         self.pdl.is_empty()
     }
 
-    #[allow(dead_code)]
     fn push_pdl(&mut self, address: Store) {
         self.pdl.push(address);
     }
 
-    #[allow(dead_code)]
+    
     fn pop_pdl(&mut self) -> Option<Store> {
         self.pdl.pop()
     }
 
     // put_structure f/n, Xi
-    #[allow(dead_code)]
     fn put_structure(&mut self, functor: Functor, register: Register) {
-        let h = &self.heap.h;
+        let h = self.heap_counter();
 
         // HEAP[H] <- <STR, H+1>
-        self.heap.cells.push(Str(*h+1));
+        self.push_heap(Str(h+1));
 
         // HEAP[H+1] <- f/n
-        self.heap.cells.push(Func(functor));
+        self.push_heap(Func(functor));
 
         // Xi <- HEAP[H]
-        self.registers.insert_x(register, self.heap.cells[*h].clone());
+        self.insert_x(register, self.heap.cells[h].clone());
 
         // H <- H + 2
-        self.heap.h += 2;
+        self.inc_heap_counter(2);
     }
 
     // set_variable Xi
-    #[allow(dead_code)]
     fn set_variable(&mut self, register: Register) {
-        let h = &self.heap.h;
+        let h = self.heap_counter();
 
         // HEAP[H] <- <REF, H>
-        self.heap.cells.push(Ref(*h));
+        self.push_heap(Ref(h));
 
         // Xi <- HEAP[H]
-        self.registers.insert_x(register, self.heap.cells[*h].clone());
+        self.insert_x(register, Ref(h));
 
         // H <- H + 1
-        self.heap.h += 1;
+        self.inc_heap_counter(1);
     }
 
     // set_value Xi
-    #[allow(dead_code)]
     fn set_value(&mut self, register: Register) {
         // HEAP[H] <- Xi
-        self.heap.cells.push(self.registers.get_x(register)
-            .expect(&format!("Illegal access: register {}, does not exist", register))
-            .clone()
+        self.push_heap(
+            self.get_x(register)
+                .expect(&format!("Illegal access: register {}, does not exist", register))
+                .clone()
         );
 
         // H <- H + 1
-        self.heap.h += 1;
+        self.inc_heap_counter(1);
     }
 
-    #[allow(dead_code)]
     fn deref(&self, mut address: Store) -> Store {
         loop {
             let (cell, a) = match address {
                 HeapAddr(addr) => (&self.heap.cells[addr], addr),
                 XAddr(addr) => {
-                    let c = self.registers.get_x(addr)
+                    let c = self.get_x(addr)
                         .expect(&format!("Illegal access: register {}, does not exist", addr));
 
                     (c, addr)
@@ -174,7 +207,6 @@ impl Env {
     }
 
     // get_structure f/n, Xi
-    #[allow(dead_code)]
     fn get_structure(&mut self, functor: Functor, register: usize) {
         let (cell, address) = match self.deref(XAddr(register)) {
             HeapAddr(addr) => (&self.heap.cells[addr], addr),
@@ -183,21 +215,21 @@ impl Env {
 
         match *cell {
             Ref(_) => {
-                let h = self.heap.h;
+                let h = self.heap_counter();
 
-                self.heap.cells.push(Str(h+1));
-                self.heap.cells.push(Func(functor));
+                self.push_heap(Str(h+1));
+                self.push_heap(Func(functor));
                 self.bind(HeapAddr(address), HeapAddr(h));
 
-                self.heap.h += 2;
-                self.heap.mode = Write;
+                self.inc_heap_counter(2);
+                self.set_mode(Write);
             },
             Str(a) => {
                 match &self.heap.cells[a] {
                     Func(s_functor) => {
                         if s_functor == &functor {
-                            self.registers.s += 1;
-                            self.heap.mode = Read;
+                            self.inc_s(1);
+                            self.set_mode(Read);
                         } else {
                             self.fail = true;
                         }
@@ -214,52 +246,49 @@ impl Env {
     }
 
     // unify_variable Xi
-    #[allow(dead_code)]
     fn unify_variable(&mut self, register: Register) {
         match self.heap.mode {
             Read => {
-                let s = &self.registers.s;
-                let cell = self.heap.cells[*s].clone();
+                let s = self.get_s();
+                let cell = self.heap.cells[s].clone();
 
-                self.registers.insert_x(register, cell);
+                self.insert_x(register, cell);
             },
             Write => {
-                let h = &self.heap.h;
+                let h = self.heap_counter();
 
-                self.heap.cells.push(Ref(*h));
-                self.registers.insert_x(register, self.heap.cells[*h].clone());
-                self.heap.h += 1;
+                self.push_heap(Ref(h));
+                self.insert_x(register, self.heap.cells[h].clone());
+                self.inc_heap_counter(1);
             }
         }
 
-        self.registers.s += 1;
+        self.inc_s(1);
     }
 
     // unify_value Xi
-    #[allow(dead_code)]
     fn unify_value(&mut self, register: Register) {
         match self.heap.mode {
             Read => {
-                let s = self.registers.s;
+                let s = self.get_s();
                 self.unify(XAddr(register), HeapAddr(s))
             },
             Write => {
-                self.heap.cells.push(self.registers.get_x(register).unwrap().clone());
-                self.heap.h += 1;
+                self.push_heap(self.registers.get_x(register).unwrap().clone());
+                self.inc_heap_counter(1);
             }
         }
 
-        self.registers.s += 1;
+        self.inc_s(1);
     }
 
-    #[allow(dead_code)]
     fn unify(&mut self, a1: Store, a2: Store) {
         self.push_pdl(a1);
         self.push_pdl(a2);
 
         self.fail = false;
 
-        while !(self.pdl.is_empty() || self.fail) {
+        while !(self.empty_pdl() || self.fail) {
             let (a1, a2) = (self.pop_pdl().unwrap(), self.pop_pdl().unwrap());
 
             let d1 = self.deref(a1);
@@ -288,9 +317,9 @@ impl Env {
                         let f1 = self.get_functor(c1);
                         let f2 = self.get_functor(c2);
 
-                        if &f1 == &f2 {
+                        if f1 == f2 {
                             let Functor(_, f1_arity) = f1;
-                            for i in 1..f1_arity+1 {
+                            for i in 1..=f1_arity {
                                 self.push_pdl(HeapAddr(v1+i));
                                 self.push_pdl(HeapAddr(v2+i));
                             }
@@ -327,20 +356,19 @@ impl Env {
     fn get_store_cell(&self, address: Store) -> &Cell {
         match address {
             HeapAddr(addr) => &self.heap.cells[addr],
-            XAddr(addr) => self.registers.get_x(addr).unwrap()
+            XAddr(addr) => self.get_x(addr).unwrap()
         }
     }
 
-    #[allow(dead_code)]
     fn bind(&mut self, a1: Store, a2: Store) {
         let (c1, a1, c1_heap) = match a1 {
             HeapAddr(addr) => (&self.heap.cells[addr], addr, true),
-            XAddr(addr) => (self.registers.get_x(addr).unwrap(), addr, false)
+            XAddr(addr) => (self.get_x(addr).unwrap(), addr, false)
         };
 
         let (c2, a2, c2_heap) = match a2 {
             HeapAddr(addr) => (&self.heap.cells[addr], addr, true),
-            XAddr(addr) => (self.registers.get_x(addr).unwrap(), addr, false)
+            XAddr(addr) => (self.get_x(addr).unwrap(), addr, false)
         };
 
         let c1_is_ref = match c1 {
@@ -359,20 +387,17 @@ impl Env {
                 self.trail(a1);
             } else {
                 let c2 = c2.clone();
-                self.registers.insert_x(a1, c2);
+                self.insert_x(a1, c2);
             }
-        } else {
-            if c2_heap {
+        } else if c2_heap {
                 self.heap.cells[a2] = c1.clone();
                 self.trail(a2);
-            } else {
-                let c1 = c1.clone();
-                self.registers.insert_x(a2, c1);
-            }
+        } else {
+            let c1 = c1.clone();
+            self.insert_x(a2, c1);
         }
     }
 
-    #[allow(dead_code)]
     fn trail(&self, _a: HeapAddress) {
         unimplemented!()
     }
