@@ -1,4 +1,5 @@
 use self::Cell::*;
+use self::Store::*;
 use self::Mode::{Read, Write};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
@@ -6,8 +7,8 @@ use std::fmt::{Display, Formatter};
 
 // heap address represented as usize that corresponds to the vector containing cell data
 type HeapAddress = usize;
-// x-register address which is identifies the register that holds the cell data in the corresponding variable
-type RegisterAddress = usize;
+// x-register address which identifies the register that holds the cell data in the corresponding variable
+type Register = usize;
 type FunctorArity = usize;
 type FunctorName = String;
 
@@ -22,9 +23,9 @@ enum Cell {
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-enum StoreAddress {
-    Heap(HeapAddress),
-    X(RegisterAddress)
+enum Store {
+    HeapAddr(HeapAddress),
+    XAddr(Register)
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -46,16 +47,16 @@ struct Heap {
 #[derive(Debug, Clone, Eq, PartialEq)]
 struct Registers {
     // variable register mapping a variable to cell data (x-register)
-    x: HashMap<RegisterAddress, Cell>,
+    x: HashMap<Register, Cell>,
     // subterm register containing heap address of next subterm to be matched (s-register)
-    s: usize,
+    s: Register,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 struct Env {
     heap: Heap,
     // the "push-down-list" contains StoreAddresses and serves as a unification stack
-    pdl: Vec<StoreAddress>,
+    pdl: Vec<Store>,
     registers: Registers,
     fail: bool,
 }
@@ -92,25 +93,25 @@ impl Env {
     }
 
     #[allow(dead_code)]
-    fn push_pdl(&mut self, address: StoreAddress) {
+    fn push_pdl(&mut self, address: Store) {
         self.pdl.push(address);
     }
 
     #[allow(dead_code)]
-    fn pop_pdl(&mut self) -> Option<StoreAddress> {
+    fn pop_pdl(&mut self) -> Option<Store> {
         self.pdl.pop()
     }
 
     // put_structure f/n, Xi
     #[allow(dead_code)]
-    fn put_structure(&mut self, functor: Functor, register: RegisterAddress) {
+    fn put_structure(&mut self, functor: Functor, register: Register) {
         let h = &self.heap.h;
 
         // HEAP[H] <- <STR, H+1>
         self.heap.cells.push(Str(*h+1));
 
         // HEAP[H+1] <- f/n
-        self.heap.cells.push(Cell::Func(functor));
+        self.heap.cells.push(Func(functor));
 
         // Xi <- HEAP[H]
         self.registers.insert_x(register, self.heap.cells[*h].clone());
@@ -121,7 +122,7 @@ impl Env {
 
     // set_variable Xi
     #[allow(dead_code)]
-    fn set_variable(&mut self, register: RegisterAddress) {
+    fn set_variable(&mut self, register: Register) {
         let h = &self.heap.h;
 
         // HEAP[H] <- <REF, H>
@@ -136,37 +137,36 @@ impl Env {
 
     // set_value Xi
     #[allow(dead_code)]
-    fn set_value(&mut self, register: RegisterAddress) {
+    fn set_value(&mut self, register: Register) {
         // HEAP[H] <- Xi
-        self.heap.cells.push(self.registers.get_x(register).unwrap().clone());
+        self.heap.cells.push(self.registers.get_x(register)
+            .expect(&format!("Illegal access: register {}, does not exist", register))
+            .clone()
+        );
 
         // H <- H + 1
         self.heap.h += 1;
     }
 
     #[allow(dead_code)]
-    fn deref(&self, mut address: StoreAddress) -> StoreAddress {
+    fn deref(&self, mut address: Store) -> Store {
         loop {
-            let cell = match address {
-                StoreAddress::Heap(addr) => &self.heap.cells[addr],
-                StoreAddress::X(addr) => self.registers.get_x(addr).unwrap()
+            let (cell, a) = match address {
+                HeapAddr(addr) => (&self.heap.cells[addr], addr),
+                XAddr(addr) => {
+                    let c = self.registers.get_x(addr)
+                        .expect(&format!("Illegal access: register {}, does not exist", addr));
+
+                    (c, addr)
+                }
             };
 
-            let a = match address {
-                StoreAddress::Heap(addr) => addr,
-                StoreAddress::X(addr) => addr
-            };
-
-            match *cell {
-                Ref(value) => {
-                    if value != a {
-                        address = StoreAddress::Heap(value);
-                    } else {
-                        return StoreAddress::Heap(a)
-                    }
-                },
-                Str(_) => return StoreAddress::Heap(a),
-                Func(_) => return StoreAddress::Heap(a)
+            if let Ref(value) = *cell {
+                if value != a {
+                    address = HeapAddr(value)
+                }
+            } else {
+                return HeapAddr(a)
             }
         }
     }
@@ -174,9 +174,9 @@ impl Env {
     // get_structure f/n, Xi
     #[allow(dead_code)]
     fn get_structure(&mut self, functor: Functor, register: usize) {
-        let (cell, address) = match self.deref(StoreAddress::X(register)) {
-            StoreAddress::Heap(addr) => (&self.heap.cells[addr], addr),
-            StoreAddress::X(addr) => (self.registers.get_x(addr).unwrap(), addr),
+        let (cell, address) = match self.deref(XAddr(register)) {
+            HeapAddr(addr) => (&self.heap.cells[addr], addr),
+            XAddr(addr) => (self.registers.get_x(addr).unwrap(), addr),
         };
 
         match *cell {
@@ -185,7 +185,7 @@ impl Env {
 
                 self.heap.cells.push(Str(h+1));
                 self.heap.cells.push(Func(functor));
-                self.bind(StoreAddress::Heap(address), StoreAddress::Heap(h));
+                self.bind(HeapAddr(address), HeapAddr(h));
 
                 self.heap.h += 2;
                 self.heap.mode = Write;
@@ -213,7 +213,7 @@ impl Env {
 
     // unify_variable Xi
     #[allow(dead_code)]
-    fn unify_variable(&mut self, register: RegisterAddress) {
+    fn unify_variable(&mut self, register: Register) {
         match self.heap.mode {
             Read => {
                 let s = &self.registers.s;
@@ -235,11 +235,11 @@ impl Env {
 
     // unify_value Xi
     #[allow(dead_code)]
-    fn unify_value(&mut self, register: RegisterAddress) {
+    fn unify_value(&mut self, register: Register) {
         match self.heap.mode {
             Read => {
                 let s = self.registers.s;
-                self.unify(StoreAddress::X(register), StoreAddress::Heap(s))
+                self.unify(XAddr(register), HeapAddr(s))
             },
             Write => {
                 self.heap.cells.push(self.registers.get_x(register).unwrap().clone());
@@ -251,7 +251,7 @@ impl Env {
     }
 
     #[allow(dead_code)]
-    fn unify(&mut self, a1: StoreAddress, a2: StoreAddress) {
+    fn unify(&mut self, a1: Store, a2: Store) {
         self.push_pdl(a1);
         self.push_pdl(a2);
 
@@ -289,8 +289,8 @@ impl Env {
                         if &f1 == &f2 {
                             let Functor(_, f1_arity) = f1;
                             for i in 1..f1_arity+1 {
-                                self.push_pdl(StoreAddress::Heap(v1+i));
-                                self.push_pdl(StoreAddress::Heap(v2+i));
+                                self.push_pdl(HeapAddr(v1+i));
+                                self.push_pdl(HeapAddr(v2+i));
                             }
                         } else {
                             self.fail = true;
@@ -322,23 +322,23 @@ impl Env {
         }
     }
 
-    fn get_store_cell(&self, address: StoreAddress) -> &Cell {
+    fn get_store_cell(&self, address: Store) -> &Cell {
         match address {
-            StoreAddress::Heap(addr) => &self.heap.cells[addr],
-            StoreAddress::X(addr) => self.registers.get_x(addr).unwrap()
+            HeapAddr(addr) => &self.heap.cells[addr],
+            XAddr(addr) => self.registers.get_x(addr).unwrap()
         }
     }
 
     #[allow(dead_code)]
-    fn bind(&mut self, a1: StoreAddress, a2: StoreAddress) {
+    fn bind(&mut self, a1: Store, a2: Store) {
         let (c1, a1, c1_heap) = match a1 {
-            StoreAddress::Heap(addr) => (&self.heap.cells[addr], addr, true),
-            StoreAddress::X(addr) => (self.registers.get_x(addr).unwrap(), addr, false)
+            HeapAddr(addr) => (&self.heap.cells[addr], addr, true),
+            XAddr(addr) => (self.registers.get_x(addr).unwrap(), addr, false)
         };
 
         let (c2, a2, c2_heap) = match a2 {
-            StoreAddress::Heap(addr) => (&self.heap.cells[addr], addr, true),
-            StoreAddress::X(addr) => (self.registers.get_x(addr).unwrap(), addr, false)
+            HeapAddr(addr) => (&self.heap.cells[addr], addr, true),
+            XAddr(addr) => (self.registers.get_x(addr).unwrap(), addr, false)
         };
 
         let c1_is_ref = match c1 {
@@ -384,11 +384,11 @@ impl Registers {
         }
     }
 
-    fn get_x(&self, register: RegisterAddress) -> Option<&Cell> {
+    fn get_x(&self, register: Register) -> Option<&Cell> {
         self.x.get(&register)
     }
 
-    fn insert_x(&mut self, register: RegisterAddress, cell: Cell) -> Option<Cell> {
+    fn insert_x(&mut self, register: Register, cell: Cell) -> Option<Cell> {
         self.x.insert(register, cell)
     }
 }
@@ -407,7 +407,10 @@ impl Heap {
 fn main() {
     let env = Env::new();
 
-    println!("init: {:?}", env);
+    let f1 = Functor(String::from("foo"), 2);
+    let f2 = f1.clone();
+
+    println!("{0:?}\n{0}\n{1}\n{2:?}", &f1, f2.to_string(), env);
 }
 
 
@@ -584,7 +587,7 @@ mod tests {
         assert_ne!(f1, f2);
     }
 
-    fn register_is(registers: &Registers, register: RegisterAddress, cell: Cell) {
+    fn register_is(registers: &Registers, register: Register, cell: Cell) {
         assert_eq!(registers.get_x(register).cloned().unwrap(), cell);
     }
 }
