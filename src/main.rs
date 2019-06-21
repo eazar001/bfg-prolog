@@ -335,23 +335,21 @@ impl Env {
     }
 
     // extracts functor only if cell is a structure or a functor, in which case this function is the identity function
-    fn get_functor(&self, structure: &Cell) -> Functor {
-        if let Str(address) = *structure {
-            let cell = &self.heap.cells[address];
-
-            match cell {
-                Str(addr) => {
-                    if let Func(f) = self.heap.cells[*addr].clone() {
-                        f
-                    } else {
-                        panic!("something went wrong")
-                    }
-                },
-                Func(f) => f.clone(),
-                _ => panic!("something went wrong")
+    fn get_functor(&self, cell: &Cell) -> Functor {
+        match cell {
+            Str(addr) => {
+                if let Func(f) = self.heap.cells[*addr].clone() {
+                    f
+                } else {
+                    panic!("invalid cell: structure cell pointing to non-functor data")
+                }
+            },
+            Func(f) => {
+                f.clone()
+            },
+            Ref(_) => {
+                panic!("invalid cell-type for functor retrieval used");
             }
-        } else {
-            panic!("something went wrong");
         }
     }
 
