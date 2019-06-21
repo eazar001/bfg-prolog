@@ -164,6 +164,8 @@ impl Env {
             if let Ref(value) = *cell {
                 if value != a {
                     address = HeapAddr(value)
+                } else {
+                    return HeapAddr(a)
                 }
             } else {
                 return HeapAddr(a)
