@@ -305,12 +305,12 @@ impl Env {
                     self.bind(d1, d2);
                 } else {
                     let (v1, v2) = (c1.address().unwrap(), c2.address().unwrap());
-                    let(f1, f2) = (self.get_functor(c1), self.get_functor(c2));
+                    let (f1, f2) = (self.get_functor(c1), self.get_functor(c2));
 
                     if f1 == f2 {
                         let n1 = f1.arity();
 
-                        for i in 1..=n1 {
+                        for i in 1..n1 {
                             self.push_pdl(HeapAddr(v1+i));
                             self.push_pdl(HeapAddr(v2+i));
                         }
