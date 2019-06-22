@@ -5,6 +5,7 @@ use self::Store::*;
 use self::Mode::{Read, Write};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
+use std::cmp::Ordering;
 
 
 // heap address represented as usize that corresponds to the vector containing cell data
@@ -334,7 +335,7 @@ impl Env {
         }
     }
 
-    // extracts functor only if cell is a structure or a functor, in which case this function is the identity function
+    // extracts functor only if cell is a structure or a functor cell
     fn get_functor(&self, cell: &Cell) -> Functor {
         match cell {
             Str(addr) => {
@@ -361,45 +362,54 @@ impl Env {
     }
 
     fn bind(&mut self, a1: Store, a2: Store) {
-        let (c1, a1, c1_heap) = match a1 {
-            HeapAddr(addr) => (&self.heap.cells[addr], addr, true),
-            XAddr(addr) => (self.get_x(addr).unwrap(), addr, false)
-        };
+        let (c1, c2) = (self.get_store_cell(a1), self.get_store_cell(a2));
 
-        let (c2, a2, c2_heap) = match a2 {
-            HeapAddr(addr) => (&self.heap.cells[addr], addr, true),
-            XAddr(addr) => (self.get_x(addr).unwrap(), addr, false)
-        };
-
-        let c1_is_ref = match c1 {
-            Ref(_) => true,
-            _ => false
-        };
-
-        let c2_is_ref = match c2 {
-            Ref(_) => true,
-            _ => false
-        };
-
-        if c1_is_ref && (!c2_is_ref || a2 < a1) {
-            if c1_heap {
-                self.heap.cells[a1] = c2.clone();
-                self.trail(a1);
-            } else {
-                let c2 = c2.clone();
-                self.insert_x(a1, c2);
-            }
-        } else if c2_heap {
-                self.heap.cells[a2] = c1.clone();
-                self.trail(a2);
+        let a2_low = if let Ordering::Less = self.cmp_stores(a2, a1) {
+            true
         } else {
-            let c1 = c1.clone();
-            self.insert_x(a2, c1);
+            false
+        };
+
+        if c1.is_ref() && (!c2.is_ref() || a2_low) {
+            let a1 = c1.address().expect("fatal error");
+
+            self.heap.cells[a1] = c2.clone();
+            self.trail(a1);
+        } else {
+            let a2 = c2.address().expect("fatal error");
+
+            self.heap.cells[a2] = c1.clone();
+            self.trail(a2);
         }
     }
 
     fn trail(&self, _a: HeapAddress) {
         unimplemented!()
+    }
+
+    fn cmp_stores(&self, a1: Store, a2: Store) -> Ordering {
+        match a1.partial_cmp(&a2) {
+            Some(order) => order,
+            None => {
+                let comp = |a| {
+                    match a {
+                        XAddr(a) => {
+                            match self.heap.cells[a] {
+                                Str(a) => a,
+                                Ref(a) => a,
+                                Func(_) => panic!("fatal error")
+                            }
+                        },
+                        HeapAddr(a) => a
+                    }
+                };
+
+
+                let (a1, a2) = (comp(a1), comp(a2));
+
+                a1.cmp(&a2)
+            }
+        }
     }
 }
 
@@ -427,6 +437,82 @@ impl Heap {
             cells: Vec::new(),
             mode: Read
         }
+    }
+}
+
+impl Cell {
+    fn is_ref(&self) -> bool {
+        if let Ref(_) = self {
+            return true
+        }
+
+        false
+    }
+
+    fn is_str(&self) -> bool {
+        if let Str(_) = self {
+            return true
+        }
+
+        false
+    }
+
+    fn is_func(&self) -> bool {
+        if let Func(_) = self {
+            return true
+        }
+
+        false
+    }
+
+    fn address(&self) -> Option<HeapAddress> {
+        match self {
+            Str(addr) => Some(*addr),
+            Ref(addr) => Some(*addr),
+            Func(_) => None
+        }
+    }
+}
+
+impl Store {
+    fn is_heap(&self) -> bool {
+        if let HeapAddr(_) = self {
+            return true
+        }
+
+        false
+    }
+
+    fn is_x(&self) -> bool {
+        if let XAddr(_) = self {
+            return true
+        }
+
+        false
+    }
+
+    fn address(&self) -> usize {
+        match self {
+            HeapAddr(addr) => *addr,
+            XAddr(addr) => *addr
+        }
+    }
+}
+
+impl PartialOrd for Store {
+    fn partial_cmp(&self, other: &Store) -> Option<Ordering> {
+        match self {
+            HeapAddr(a1) => {
+                if other.is_heap() {
+                    let a2 = other.address();
+
+                    return Some(a1.cmp(&a2))
+                }
+            },
+            XAddr(_) => return None
+        }
+
+        None
     }
 }
 
