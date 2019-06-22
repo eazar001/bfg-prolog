@@ -301,34 +301,21 @@ impl Env {
                 let c1 = self.get_store_cell(d1);
                 let c2 = self.get_store_cell(d2);
 
-                let v1 = match c1 {
-                    Str(addr) => *addr,
-                    Ref(addr) => *addr,
-                    Func(_) => panic!("something went wrong")
-                };
+                if c1.is_ref() || c2.is_ref() {
+                    self.bind(d1, d2);
+                } else {
+                    let (v1, v2) = (c1.address().unwrap(), c2.address().unwrap());
+                    let(f1, f2) = (self.get_functor(c1), self.get_functor(c2));
 
-                let v2 = match c2 {
-                    Str(addr) => *addr,
-                    Ref(addr) => *addr,
-                    Func(_) => panic!("something went wrong")
-                };
+                    if f1 == f2 {
+                        let n1 = f1.arity();
 
-                match (c1, c2) {
-                    (Ref(_), _) => self.bind(d1, d2),
-                    (_, Ref(_)) => self.bind(d1, d2),
-                    _ => {
-                        let f1 = self.get_functor(c1);
-                        let f2 = self.get_functor(c2);
-
-                        if f1 == f2 {
-                            let Functor(_, f1_arity) = f1;
-                            for i in 1..=f1_arity {
-                                self.push_pdl(HeapAddr(v1+i));
-                                self.push_pdl(HeapAddr(v2+i));
-                            }
-                        } else {
-                            self.fail = true;
+                        for i in 1..=n1 {
+                            self.push_pdl(HeapAddr(v1+i));
+                            self.push_pdl(HeapAddr(v2+i));
                         }
+                    } else {
+                        self.fail = true;
                     }
                 }
             }
