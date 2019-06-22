@@ -53,6 +53,8 @@ struct Registers {
     x: HashMap<Register, Cell>,
     // subterm register containing heap address of next subterm to be matched (s-register)
     s: Register,
+    // program/instruction counter, containing address of the next instruction to be executed
+    p: Register
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -92,10 +94,6 @@ impl Env {
 
     fn push_heap(&mut self, cell: Cell) {
         self.heap.cells.push(cell);
-    }
-
-    fn push_foo(cells: &mut Vec<Cell>, cell: Cell) {
-        cells.push(cell);
     }
 
     fn get_x(&self, register: Register) -> Option<&Cell> {
@@ -138,9 +136,16 @@ impl Env {
         self.pdl.push(address);
     }
 
-    
     fn pop_pdl(&mut self) -> Option<Store> {
         self.pdl.pop()
+    }
+
+    fn call(&mut self, _functor: Functor) {
+        unimplemented!()
+    }
+
+    fn proceed(&mut self) {
+//        unimplemented!()
     }
 
     // put_structure f/n, Xi
@@ -158,6 +163,36 @@ impl Env {
 
         // H <- H + 2
         self.inc_heap_counter(2);
+    }
+
+    // put_variable Xn, Ai
+    fn put_variable(&mut self, term_reg: Register, arg_reg: Register) {
+        let h = self.heap_counter();
+
+        self.push_heap(Ref(h));
+        self.insert_x(term_reg, Ref(h));
+        self.insert_x(arg_reg, Ref(h));
+
+        self.inc_heap_counter(1);
+    }
+
+    // put_value Xn, Ai
+    fn put_value(&mut self, term_reg: Register, arg_reg: Register) {
+        let x = self.get_x(term_reg).unwrap().clone();
+
+        self.insert_x(arg_reg, x);
+    }
+
+    // get_variable Xn, Ai
+    fn get_variable(&mut self, term_reg: Register, arg_reg: Register) {
+        let a = self.get_x(arg_reg).unwrap().clone();
+
+        self.insert_x(term_reg, a);
+    }
+
+    // get_value Xn, Ai
+    fn get_value(&mut self, term_reg: Register, arg_reg: Register) {
+        self.unify(XAddr(term_reg), XAddr(arg_reg));
     }
 
     // set_variable Xi
@@ -405,7 +440,8 @@ impl Registers {
         Registers {
             h: 0,
             x: HashMap::new(),
-            s: 0
+            s: 0,
+            p: 0
         }
     }
 
