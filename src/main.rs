@@ -53,6 +53,8 @@ struct Registers {
     x: HashMap<Register, Cell>,
     // subterm register containing heap address of next subterm to be matched (s-register)
     s: Register,
+    // program/instruction counter, containing address of the next instruction to be executed
+    p: Register
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -92,10 +94,6 @@ impl Env {
 
     fn push_heap(&mut self, cell: Cell) {
         self.heap.cells.push(cell);
-    }
-
-    fn push_foo(cells: &mut Vec<Cell>, cell: Cell) {
-        cells.push(cell);
     }
 
     fn get_x(&self, register: Register) -> Option<&Cell> {
@@ -138,9 +136,16 @@ impl Env {
         self.pdl.push(address);
     }
 
-    
     fn pop_pdl(&mut self) -> Option<Store> {
         self.pdl.pop()
+    }
+
+    fn call(&mut self, _functor: Functor) {
+        unimplemented!()
+    }
+
+    fn proceed(&mut self) {
+//        unimplemented!()
     }
 
     // put_structure f/n, Xi
@@ -405,7 +410,8 @@ impl Registers {
         Registers {
             h: 0,
             x: HashMap::new(),
-            s: 0
+            s: 0,
+            p: 0
         }
     }
 
