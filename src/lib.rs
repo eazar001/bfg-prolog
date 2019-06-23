@@ -165,7 +165,7 @@ impl Env {
         self.push_heap(Func(functor));
 
         // Xi <- HEAP[H]
-        self.insert_x(register, self.heap.cells[h].clone());
+        self.insert_x(register, Str(h+1));
 
         // H <- H + 2
         self.inc_heap_counter(2);
@@ -412,7 +412,7 @@ impl Env {
     }
 
     fn trail(&self, _a: HeapAddress) {
-        unimplemented!()
+
     }
 
     fn cmp_stores(&self, a1: Store, a2: Store) -> Ordering {
@@ -668,7 +668,6 @@ mod tests {
         register_is(registers,4, Ref(3));
     }
 
-    #[ignore]
     #[test]
     fn test_m0_2() {
         // L0 Program: p(f(X), h(Y, f(a)), Y).
@@ -678,6 +677,25 @@ mod tests {
         let f = String::from("f");
         let p = String::from("p");
         let a = String::from("a");
+
+        // put_structure h/2, x3
+        env.put_structure(Functor(h.clone(), 2), 2);
+        // set_variable, x2
+        env.set_variable(1);
+        // set_variable, x5
+        env.set_variable(4);
+        // put_structure f/1, x4
+        env.put_structure(Functor(f.clone(), 1), 3);
+        // set_value, x5
+        env.set_value(4);
+        // put_structure p/3, x1
+        env.put_structure(Functor(p.clone(), 3), 0);
+        // set_value x2
+        env.set_value(1);
+        // set_value x3
+        env.set_value(2);
+        // set_value x4
+        env.set_value(3);
 
         // get_structure p/3, x1
         env.get_structure(Functor(p.clone(), 3), 0);
@@ -692,7 +710,7 @@ mod tests {
         // unify_variable x5
         env.unify_variable(4);
         // get_structure h/2, x3
-        env.get_structure(Functor(h.clone(), 1), 2);
+        env.get_structure(Functor(h.clone(), 2), 2);
         // unify_value x4
         env.unify_value(3);
         // unify_variable x6
