@@ -1,4 +1,7 @@
 #![allow(dead_code)]
+#![allow(unused)]
+
+mod machine;
 
 use self::Cell::*;
 use self::Store::*;
@@ -6,6 +9,7 @@ use self::Mode::{Read, Write};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::cmp::Ordering;
+use machine::instructions::*;
 
 
 // heap address represented as usize that corresponds to the vector containing cell data
@@ -16,7 +20,7 @@ type FunctorArity = usize;
 type FunctorName = String;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-struct Functor(FunctorName, FunctorArity);
+pub struct Functor(FunctorName, FunctorArity);
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 enum Cell {
@@ -26,7 +30,7 @@ enum Cell {
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-enum Store {
+pub enum Store {
     HeapAddr(HeapAddress),
     XAddr(Register)
 }
@@ -54,7 +58,9 @@ struct Registers {
     // subterm register containing heap address of next subterm to be matched (s-register)
     s: Register,
     // program/instruction counter, containing address of the next instruction to be executed
-    p: Register
+    p: Register,
+    // address of the next instruction in the code area to follow up after successful return from a call
+    cp: Register
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -441,7 +447,8 @@ impl Registers {
             h: 0,
             x: HashMap::new(),
             s: 0,
-            p: 0
+            p: 0,
+            cp: 0
         }
     }
 
