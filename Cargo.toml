@@ -1,5 +1,5 @@
 [package]
-name = "wam-prolog-in-rust"
+name = "wam-prolog"
 version = "0.1.0"
 authors = ["Ebrahim Azarisooreh <ebrahim.azarisooreh@gmail.com>"]
 edition = "2018"
