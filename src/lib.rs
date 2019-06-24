@@ -238,14 +238,18 @@ impl Env {
                 }
             };
 
-            if let Ref(value) = *cell {
-                if value != a {
-                    address = HeapAddr(value)
-                } else {
-                    return HeapAddr(a)
-                }
-            } else {
-                return HeapAddr(a)
+            match cell {
+                Ref(value) => {
+                    if *value != a {
+                        // keep following the reference chain
+                        address = HeapAddr(*value);
+                    } else {
+                        // ref cell is unbound return the address
+                        return HeapAddr(a)
+                    }
+                },
+                Str(addr) => return HeapAddr(*addr),
+                Func(_) => return HeapAddr(a)
             }
         }
     }
@@ -660,23 +664,23 @@ mod tests {
         // 10       Str(1),
         // 11       Str(5),
 
-        assert_eq!(env.deref(HeapAddr(0)), HeapAddr(0));
+        assert_eq!(env.deref(HeapAddr(0)), HeapAddr(1));
         assert_eq!(env.deref(HeapAddr(1)), HeapAddr(1));
         assert_eq!(env.deref(HeapAddr(2)), HeapAddr(2));
         assert_eq!(env.deref(HeapAddr(3)), HeapAddr(3));
-        assert_eq!(env.deref(HeapAddr(4)), HeapAddr(4));
+        assert_eq!(env.deref(HeapAddr(4)), HeapAddr(5));
         assert_eq!(env.deref(HeapAddr(5)), HeapAddr(5));
         assert_eq!(env.deref(HeapAddr(6)), HeapAddr(3));
-        assert_eq!(env.deref(HeapAddr(7)), HeapAddr(7));
+        assert_eq!(env.deref(HeapAddr(7)), HeapAddr(8));
         assert_eq!(env.deref(HeapAddr(8)), HeapAddr(8));
         assert_eq!(env.deref(HeapAddr(9)), HeapAddr(2));
-        assert_eq!(env.deref(HeapAddr(10)), HeapAddr(10));
-        assert_eq!(env.deref(HeapAddr(11)), HeapAddr(11));
+        assert_eq!(env.deref(HeapAddr(10)), HeapAddr(1));
+        assert_eq!(env.deref(HeapAddr(11)), HeapAddr(5));
 
-        assert_eq!(env.deref(XAddr(0)), HeapAddr(0));
+        assert_eq!(env.deref(XAddr(0)), HeapAddr(8));
         assert_eq!(env.deref(XAddr(1)), HeapAddr(2));
-        assert_eq!(env.deref(XAddr(2)), HeapAddr(0));
-        assert_eq!(env.deref(XAddr(3)), HeapAddr(4));
+        assert_eq!(env.deref(XAddr(2)), HeapAddr(1));
+        assert_eq!(env.deref(XAddr(3)), HeapAddr(5));
         assert_eq!(env.deref(XAddr(4)), HeapAddr(3));
     }
 
