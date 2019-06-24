@@ -1,5 +1,5 @@
 [package]
-name = "wam-prolog"
+name = "bfg-prolog"
 version = "0.1.0"
 authors = ["Ebrahim Azarisooreh <ebrahim.azarisooreh@gmail.com>"]
 edition = "2018"

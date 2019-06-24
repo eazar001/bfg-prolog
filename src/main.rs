@@ -1,4 +1,4 @@
-use wam_prolog::{Env, Functor};
+use bfg_prolog::{Env, Functor};
 
 
 fn main() {

@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/wam-prolog.iml" filepath="$PROJECT_DIR$/.idea/wam-prolog.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/bfg-prolog.iml" filepath="$PROJECT_DIR$/.idea/bfg-prolog.iml" />
     </modules>
   </component>
 </project>

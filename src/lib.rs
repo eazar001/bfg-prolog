@@ -721,6 +721,8 @@ mod tests {
         env.unify_variable(6);
         // get_structure a/0, x7
         env.get_structure(Functor(a.clone(), 0), 6);
+
+        println!("{:?}", env.heap.cells);
     }
 
     #[test]
