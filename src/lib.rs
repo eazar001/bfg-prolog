@@ -357,7 +357,16 @@ impl Env {
                 if c1.is_ref() || c2.is_ref() {
                     self.bind(d1, d2);
                 } else {
-                    let (v1, v2) = (c1.address().unwrap(), c2.address().unwrap());
+                    let v1 = match c1.address() {
+                        Some(addr) => addr,
+                        None => a1.address()
+                    };
+
+                    let v2 = match c2.address() {
+                        Some(addr) => addr,
+                        None => a2.address()
+                    };
+
                     let (f1, f2) = (self.get_functor(c1), self.get_functor(c2));
 
                     if f1 == f2 {
