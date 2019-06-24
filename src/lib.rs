@@ -615,6 +615,72 @@ mod tests {
     }
 
     #[test]
+    fn test_deref() {
+        let mut env = Env::new();
+
+        let h = String::from("h");
+        let f = String::from("f");
+        let p = String::from("p");
+
+        // put_structure h/2, x3
+        env.put_structure(Functor(h.clone(), 2), 2);
+        // set_variable, x2
+        env.set_variable(1);
+        // set_variable, x5
+        env.set_variable(4);
+        // put_structure f/1, x4
+        env.put_structure(Functor(f.clone(), 1), 3);
+        // set_value, x5
+        env.set_value(4);
+        // put_structure p/3, x1
+        env.put_structure(Functor(p.clone(), 3), 0);
+        // set_value x2
+        env.set_value(1);
+        // set_value x3
+        env.set_value(2);
+        // set_value x4
+        env.set_value(3);
+
+        //        register_is(registers, 0, Str(8));
+        //        register_is(registers, 1, Ref(2));
+        //        register_is(registers, 2, Str(1));
+        //        register_is(registers, 3, Str(5));
+        //        register_is(registers, 4, Ref(3));
+
+        // 0        Str(1),
+        // 1        Func(Functor(h, 2)),
+        // 2        Ref(2),
+        // 3        Ref(3),
+        // 4        Str(5),
+        // 5        Func(Functor(f, 1)),
+        // 6        Ref(3),
+        // 7        Str(8),
+        // 8        Func(Functor(p, 3)),
+        // 9        Ref(2),
+        // 10       Str(1),
+        // 11       Str(5),
+
+        assert_eq!(env.deref(HeapAddr(0)), HeapAddr(0));
+        assert_eq!(env.deref(HeapAddr(1)), HeapAddr(1));
+        assert_eq!(env.deref(HeapAddr(2)), HeapAddr(2));
+        assert_eq!(env.deref(HeapAddr(3)), HeapAddr(3));
+        assert_eq!(env.deref(HeapAddr(4)), HeapAddr(4));
+        assert_eq!(env.deref(HeapAddr(5)), HeapAddr(5));
+        assert_eq!(env.deref(HeapAddr(6)), HeapAddr(3));
+        assert_eq!(env.deref(HeapAddr(7)), HeapAddr(7));
+        assert_eq!(env.deref(HeapAddr(8)), HeapAddr(8));
+        assert_eq!(env.deref(HeapAddr(9)), HeapAddr(2));
+        assert_eq!(env.deref(HeapAddr(10)), HeapAddr(10));
+        assert_eq!(env.deref(HeapAddr(11)), HeapAddr(11));
+
+        assert_eq!(env.deref(XAddr(0)), HeapAddr(0));
+        assert_eq!(env.deref(XAddr(1)), HeapAddr(2));
+        assert_eq!(env.deref(XAddr(2)), HeapAddr(0));
+        assert_eq!(env.deref(XAddr(3)), HeapAddr(4));
+        assert_eq!(env.deref(XAddr(4)), HeapAddr(3));
+    }
+
+    #[test]
     fn test_m0_1() {
         // L0 program: p(Z, h(Z, W), f(W)).
         let mut env = Env::new();
@@ -661,11 +727,11 @@ mod tests {
         let (heap_cells, registers) = (env.heap.cells, &env.registers);
         assert_eq!(heap_cells, expected_heap_cells);
 
-        register_is(registers,0, Str(8));
-        register_is(registers,1, Ref(2));
-        register_is(registers,2, Str(1));
-        register_is(registers,3, Str(5));
-        register_is(registers,4, Ref(3));
+        register_is(registers, 0, Str(8));
+        register_is(registers, 1, Ref(2));
+        register_is(registers, 2, Str(1));
+        register_is(registers, 3, Str(5));
+        register_is(registers, 4, Ref(3));
     }
 
     #[test]
