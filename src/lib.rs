@@ -258,10 +258,18 @@ impl Env {
     fn get_structure(&mut self, functor: Functor, register: Register) {
         let (cell, address) = match self.deref(XAddr(register)) {
             HeapAddr(addr) => (&self.heap.cells[addr], addr),
-            XAddr(addr) => (self.registers.get_x(addr).unwrap(), addr),
+            _ => panic!("fatal error"),
         };
 
-        match *cell {
+        let c = if cell.is_func() {
+            Str(address)
+        } else {
+            cell.clone()
+        };
+
+        let cell = &c;
+
+        match cell {
             Ref(_) => {
                 let h = self.heap_counter();
 
@@ -273,8 +281,8 @@ impl Env {
                 self.set_mode(Write);
             },
             Str(a) => {
-                match &self.heap.cells[a] {
-                    Func(s_functor) => {
+                match self.heap.cells[*a] {
+                    Func(ref s_functor) => {
                         if s_functor == &functor {
                             self.set_s(a+1);
                             self.set_mode(Read);
@@ -792,7 +800,7 @@ mod tests {
         // get_structure a/0, x7
         env.get_structure(Functor(a.clone(), 0), 6);
 
-        println!("{:?}", env.heap.cells);
+        println!("{}: {:?}", !env.fail, env.registers);
     }
 
     #[test]
