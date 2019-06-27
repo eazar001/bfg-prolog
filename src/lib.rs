@@ -809,7 +809,37 @@ mod tests {
         // get_structure a/0, x7
         env.get_structure(Functor(a.clone(), 0), 6);
 
-        println!("{}: {:?}", !env.fail, env.registers);
+        let expected_heap_cells = vec![
+            Str(1),
+            Func(Functor(h.clone(), 2)),
+            Str(13),
+            Str(16),
+            Str(5),
+            Func(Functor(f.clone(), 1)),
+            Ref(3),
+            Str(8),
+            Func(Functor(p.clone(), 3)),
+            Ref(2),
+            Str(1),
+            Str(5),
+            Str(13),
+            Func(Functor(f.clone(), 1)),
+            Ref(3),
+            Str(16),
+            Func(Functor(f.clone(), 1)),
+            Str(19),
+            Str(19),
+            Func(Functor(a.clone(), 0))
+        ];
+
+        let (heap_cells, registers) = (&env.heap.cells, &env.registers);
+        assert_eq!(heap_cells.clone(), expected_heap_cells);
+
+        register_is(registers, 0, Str(8));
+        register_is(registers, 1, Ref(2));
+        register_is(registers, 2, Str(1));
+        register_is(registers, 3, Str(5));
+        register_is(registers, 4, Ref(3));
     }
 
     #[test]
