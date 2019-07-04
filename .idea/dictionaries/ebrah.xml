@@ -4,6 +4,7 @@
       <w>addr</w>
       <w>deref</w>
       <w>subterm</w>
+      <w>usize</w>
     </words>
   </dictionary>
 </component>

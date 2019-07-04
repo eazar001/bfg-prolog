@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 #![allow(unused)]
+#![allow(clippy::new_without_default)]
 
 mod machine;
 
@@ -7,9 +8,11 @@ use self::Cell::*;
 use self::Store::*;
 use self::Mode::{Read, Write};
 use std::collections::HashMap;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Display, Formatter, Debug};
 use std::cmp::Ordering;
 use machine::instructions::*;
+use env_logger;
+use log::{info, warn, error, debug, trace};
 
 
 // heap address represented as usize that corresponds to the vector containing cell data
@@ -45,11 +48,10 @@ enum Mode {
 #[derive(Debug, Clone, Eq, PartialEq)]
 struct Heap {
     // all the data that resides on the heap
-    cells: Vec<Cell>,
-    mode: Mode
+    cells: Vec<Cell>
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 struct Registers {
     // the "h" counter contains the location of the next cell to be pushed onto the heap
     h: HeapAddress,
@@ -69,12 +71,38 @@ pub struct Env {
     // the "push-down-list" contains StoreAddresses and serves as a unification stack
     pdl: Vec<Store>,
     registers: Registers,
+    mode: Mode,
     fail: bool,
+}
+
+impl Debug for Registers {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
+        let mut keys: Vec<&usize> = self.x.keys().collect();
+        keys.sort();
+
+        write!(f, "[")?;
+
+        for key in &keys[..keys.len()-1] {
+            write!(f, "{}: {:?}, ", key, self.x[key])?;
+        }
+
+        Ok(writeln!(f, "{}: {:?}]", keys.len(), self.x[&keys.len()])?)
+    }
 }
 
 impl Display for Functor {
     fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
         Ok(write!(f, "{}/{}", self.name(), self.arity())?)
+    }
+}
+
+impl From<&str> for Functor {
+    fn from(s: &str) -> Functor {
+        let v: Vec<&str> = s.split('/').collect();
+
+        assert_eq!(v.len(), 2);
+
+        Functor(String::from(v[0]), String::from(v[1]).parse().unwrap())
     }
 }
 
@@ -94,6 +122,7 @@ impl Env {
             heap: Heap::new(),
             pdl: Vec::new(),
             registers: Registers::new(),
+            mode: Read,
             fail: false
         }
     }
@@ -102,12 +131,12 @@ impl Env {
         self.heap.cells.push(cell);
     }
 
-    fn get_x(&self, register: Register) -> Option<&Cell> {
-        self.registers.get_x(register)
+    fn get_x(&self, xi: Register) -> Option<&Cell> {
+        self.registers.get_x(xi)
     }
 
-    fn insert_x(&mut self, register: Register, cell: Cell) -> Option<Cell> {
-        self.registers.insert_x(register, cell)
+    fn insert_x(&mut self, xi: Register, cell: Cell) -> Option<Cell> {
+        self.registers.insert_x(xi, cell)
     }
 
     fn get_s(&self) -> Register {
@@ -131,7 +160,7 @@ impl Env {
     }
 
     fn set_mode(&mut self, mode: Mode) {
-        self.heap.mode = mode;
+        self.mode = mode;
     }
 
     fn empty_pdl(&mut self) -> bool {
@@ -155,72 +184,40 @@ impl Env {
     }
 
     // put_structure f/n, Xi
-    fn put_structure(&mut self, functor: Functor, register: Register) {
+    fn put_structure(&mut self, f: Functor, xi: Register) {
         let h = self.heap_counter();
 
         // HEAP[H] <- <STR, H+1>
         self.push_heap(Str(h+1));
 
         // HEAP[H+1] <- f/n
-        self.push_heap(Func(functor));
+        self.push_heap(Func(f));
 
         // Xi <- HEAP[H]
-        self.insert_x(register, Str(h+1));
+        self.insert_x(xi, self.heap.cells[h].clone());
 
         // H <- H + 2
         self.inc_heap_counter(2);
     }
 
-    // put_variable Xn, Ai
-    fn put_variable(&mut self, term_reg: Register, arg_reg: Register) {
-        let h = self.heap_counter();
-
-        self.push_heap(Ref(h));
-        self.insert_x(term_reg, Ref(h));
-        self.insert_x(arg_reg, Ref(h));
-
-        self.inc_heap_counter(1);
-    }
-
-    // put_value Xn, Ai
-    fn put_value(&mut self, term_reg: Register, arg_reg: Register) {
-        let x = self.get_x(term_reg).unwrap().clone();
-
-        self.insert_x(arg_reg, x);
-    }
-
-    // get_variable Xn, Ai
-    fn get_variable(&mut self, term_reg: Register, arg_reg: Register) {
-        let a = self.get_x(arg_reg).unwrap().clone();
-
-        self.insert_x(term_reg, a);
-    }
-
-    // get_value Xn, Ai
-    fn get_value(&mut self, term_reg: Register, arg_reg: Register) {
-        self.unify(XAddr(term_reg), XAddr(arg_reg));
-    }
-
     // set_variable Xi
-    fn set_variable(&mut self, register: Register) {
+    fn set_variable(&mut self, xi: Register) {
         let h = self.heap_counter();
 
         // HEAP[H] <- <REF, H>
         self.push_heap(Ref(h));
 
         // Xi <- HEAP[H]
-        self.insert_x(register, Ref(h));
+        self.insert_x(xi, self.heap.cells[h].clone());
 
         // H <- H + 1
         self.inc_heap_counter(1);
     }
 
     // set_value Xi
-    fn set_value(&mut self, register: Register) {
-        let e = &format!("Illegal access: register {}, does not exist", register);
-
+    fn set_value(&mut self, xi: Register) {
         // HEAP[H] <- Xi
-        self.push_heap(self.get_x(register).expect(e).clone());
+        self.push_heap(self.get_x(xi).cloned().unwrap());
 
         // H <- H + 1
         self.inc_heap_counter(1);
@@ -245,54 +242,46 @@ impl Env {
                         address = HeapAddr(*value);
                     } else {
                         // ref cell is unbound return the address
-                        return HeapAddr(a)
+                        return address
                     }
                 },
-                Str(addr) => return HeapAddr(*addr),
-                Func(_) => return HeapAddr(a)
+                Str(addr) => return address,
+                Func(_) => return address
             }
         }
     }
 
     // get_structure f/n, Xi
-    fn get_structure(&mut self, functor: Functor, register: Register) {
-        let (cell, address) = match self.deref(XAddr(register)) {
-            HeapAddr(addr) => (&self.heap.cells[addr], addr),
-            _ => panic!("fatal error"),
+    fn get_structure(&mut self, functor: Functor, xi: Register) {
+        let (cell, address) = match self.deref(XAddr(xi)) {
+            HeapAddr(addr) => (self.heap.cells[addr].clone(), addr),
+            XAddr(addr) => (self.get_x(xi).cloned().unwrap(), addr)
         };
-
-        let c = if cell.is_func() {
-            Str(address)
-        } else {
-            cell.clone()
-        };
-
-        let cell = &c;
 
         match cell {
             Ref(_) => {
                 let h = self.heap_counter();
 
                 self.push_heap(Str(h+1));
-                self.push_heap(Func(functor));
+                self.push_heap(Func(functor.clone()));
                 self.bind(HeapAddr(address), HeapAddr(h));
 
                 self.inc_heap_counter(2);
                 self.set_mode(Write);
+                trace!("get_structure with {} @ X{} ... Mode set to {:?}", functor, xi, self.mode);
             },
             Str(a) => {
-                match self.heap.cells[*a] {
+                match self.heap.cells[a] {
                     Func(ref s_functor) => {
                         if s_functor == &functor {
                             self.set_s(a+1);
                             self.set_mode(Read);
+                            trace!("get_structure with {} @ X{} ... Mode set to {:?}", functor, xi, self.mode);
                         } else {
                             self.fail = true;
                         }
                     }
-                    _ => {
-                        self.fail = true;
-                    }
+                    _ => panic!()
                 }
             },
             Func(_) => {
@@ -302,18 +291,18 @@ impl Env {
     }
 
     // unify_variable Xi
-    fn unify_variable(&mut self, register: Register) {
-        match self.heap.mode {
+    fn unify_variable(&mut self, xi: Register) {
+        match self.mode {
             Read => {
                 let s = self.get_s();
 
-                self.insert_x(register, self.heap.cells[s].clone());
+                self.insert_x(xi, self.heap.cells[s].clone());
             },
             Write => {
                 let h = self.heap_counter();
 
                 self.push_heap(Ref(h));
-                self.insert_x(register, Ref(h));
+                self.insert_x(xi, self.heap.cells[h].clone());
                 self.inc_heap_counter(1);
             }
         }
@@ -322,15 +311,15 @@ impl Env {
     }
 
     // unify_value Xi
-    fn unify_value(&mut self, register: Register) {
-        match self.heap.mode {
+    fn unify_value(&mut self, xi: Register) {
+        match self.mode {
             Read => {
                 let s = self.get_s();
 
-                self.unify(XAddr(register), HeapAddr(s))
+                self.unify(XAddr(xi), HeapAddr(s))
             },
             Write => {
-                self.push_heap(self.get_x(register).unwrap().clone());
+                self.push_heap(self.get_x(xi).unwrap().clone());
                 self.inc_heap_counter(1);
             }
         }
@@ -359,12 +348,12 @@ impl Env {
                 } else {
                     let v1 = match c1.address() {
                         Some(addr) => addr,
-                        None => a1.address()
+                        None => panic!()
                     };
 
                     let v2 = match c2.address() {
                         Some(addr) => addr,
-                        None => a2.address()
+                        None => panic!()
                     };
 
                     let (f1, f2) = (self.get_functor(c1), self.get_functor(c2));
@@ -391,13 +380,16 @@ impl Env {
                 if let Func(f) = self.heap.cells[*addr].clone() {
                     f
                 } else {
+                    error!("encountered a structure that doesn't point to a functor");
                     panic!("invalid cell: structure cell pointing to non-functor data")
                 }
             },
             Func(f) => {
+                warn!("accessing a functor from a functor-cell, but this normally shouldn't happen");
                 f.clone()
             },
             Ref(_) => {
+                error!("tried getting a functor from a ref-cell");
                 panic!("invalid cell-type for functor retrieval used");
             }
         }
@@ -412,28 +404,13 @@ impl Env {
 
     fn bind(&mut self, a1: Store, a2: Store) {
         let (c1, c2) = (self.get_store_cell(a1), self.get_store_cell(a2));
+        let (a1, a2) = (c1.address().unwrap(), c2. address().unwrap());
 
-        let a2_low = if let Ordering::Less = self.cmp_stores(a2, a1) {
-            true
-        } else {
-            false
-        };
-
-        if c1.is_ref() && (!c2.is_ref() || a2_low) {
-            let a1 = c1.address().expect("fatal error");
-
+        if c1.is_ref() && (!c2.is_ref() || a2 < a1) {
             self.heap.cells[a1] = c2.clone();
-            self.trail(a1);
         } else {
-            let a2 = c2.address().expect("fatal error");
-
             self.heap.cells[a2] = c1.clone();
-            self.trail(a2);
         }
-    }
-
-    fn trail(&self, _a: HeapAddress) {
-
     }
 
     fn cmp_stores(&self, a1: Store, a2: Store) -> Ordering {
@@ -485,8 +462,7 @@ impl Registers {
 impl Heap {
     fn new() -> Heap {
         Heap {
-            cells: Vec::new(),
-            mode: Read
+            cells: Vec::new()
         }
     }
 }
@@ -571,6 +547,14 @@ impl PartialOrd for Store {
 mod tests {
     use super::*;
 
+    fn init_test_logger() {
+        env_logger::builder()
+            .is_test(true)
+            .default_format_timestamp(false)
+            .try_init()
+            .unwrap()
+    }
+
     // set_variable Xi
     #[test]
     fn test_set_variable() {
@@ -619,7 +603,7 @@ mod tests {
 
         let expected_heap_cells = vec![
             Str(1),
-            Func(Functor(String::from("foo"), 2)),
+            Func(Functor::from("foo/2")),
             Ref(2),
             Ref(3),
             Ref(2)
@@ -639,70 +623,30 @@ mod tests {
     fn test_deref() {
         let mut env = Env::new();
 
-        let h = String::from("h");
-        let f = String::from("f");
-        let p = String::from("p");
+        env.heap.cells = vec![
+            Ref(2),
+            Ref(3),
+            Ref(1),
+            Ref(3),
+            Str(5),
+            Func(Functor::from("f/2")),
+            Ref(3)
+        ];
 
-        // put_structure h/2, x3
-        env.put_structure(Functor(h.clone(), 2), 2);
-        // set_variable, x2
-        env.set_variable(1);
-        // set_variable, x5
-        env.set_variable(4);
-        // put_structure f/1, x4
-        env.put_structure(Functor(f.clone(), 1), 3);
-        // set_value, x5
-        env.set_value(4);
-        // put_structure p/3, x1
-        env.put_structure(Functor(p.clone(), 3), 0);
-        // set_value x2
-        env.set_value(1);
-        // set_value x3
-        env.set_value(2);
-        // set_value x4
-        env.set_value(3);
+        env.insert_x(3, Ref(4));
 
-        //        register_is(registers, 0, Str(8));
-        //        register_is(registers, 1, Ref(2));
-        //        register_is(registers, 2, Str(1));
-        //        register_is(registers, 3, Str(5));
-        //        register_is(registers, 4, Ref(3));
-
-        // 0        Str(1),
-        // 1        Func(Functor(h, 2)),
-        // 2        Ref(2),
-        // 3        Ref(3),
-        // 4        Str(5),
-        // 5        Func(Functor(f, 1)),
-        // 6        Ref(3),
-        // 7        Str(8),
-        // 8        Func(Functor(p, 3)),
-        // 9        Ref(2),
-        // 10       Str(1),
-        // 11       Str(5),
-
-        assert_eq!(env.deref(HeapAddr(0)), HeapAddr(1));
-        assert_eq!(env.deref(HeapAddr(1)), HeapAddr(1));
-        assert_eq!(env.deref(HeapAddr(2)), HeapAddr(2));
+        assert_eq!(env.deref(HeapAddr(0)), HeapAddr(3));
+        assert_eq!(env.deref(HeapAddr(1)), HeapAddr(3));
+        assert_eq!(env.deref(HeapAddr(2)), HeapAddr(3));
         assert_eq!(env.deref(HeapAddr(3)), HeapAddr(3));
-        assert_eq!(env.deref(HeapAddr(4)), HeapAddr(5));
+        assert_eq!(env.deref(HeapAddr(4)), HeapAddr(4));
         assert_eq!(env.deref(HeapAddr(5)), HeapAddr(5));
         assert_eq!(env.deref(HeapAddr(6)), HeapAddr(3));
-        assert_eq!(env.deref(HeapAddr(7)), HeapAddr(8));
-        assert_eq!(env.deref(HeapAddr(8)), HeapAddr(8));
-        assert_eq!(env.deref(HeapAddr(9)), HeapAddr(2));
-        assert_eq!(env.deref(HeapAddr(10)), HeapAddr(1));
-        assert_eq!(env.deref(HeapAddr(11)), HeapAddr(5));
-
-        assert_eq!(env.deref(XAddr(0)), HeapAddr(8));
-        assert_eq!(env.deref(XAddr(1)), HeapAddr(2));
-        assert_eq!(env.deref(XAddr(2)), HeapAddr(1));
-        assert_eq!(env.deref(XAddr(3)), HeapAddr(5));
-        assert_eq!(env.deref(XAddr(4)), HeapAddr(3));
+        assert_eq!(env.deref(XAddr(3)), HeapAddr(4));
     }
 
     #[test]
-    fn test_m0_1() {
+    fn test_exercise_2_1() {
         // L0 program: p(Z, h(Z, W), f(W)).
         let mut env = Env::new();
 
@@ -756,8 +700,10 @@ mod tests {
     }
 
     #[test]
-    fn test_m0_2() {
-        // L0 Program: p(f(X), h(Y, f(a)), Y).
+    fn test_exercise_2_3() {
+        init_test_logger();
+
+        // L0 Program: p(Z, h(Z, W), f(W)) = p(f(X), h(Y, f(a)), Y).
         let mut env = Env::new();
 
         let h = String::from("h");
@@ -766,48 +712,48 @@ mod tests {
         let a = String::from("a");
 
         // put_structure h/2, x3
-        env.put_structure(Functor(h.clone(), 2), 2);
+        env.put_structure(Functor::from("h/2"), 3);
         // set_variable, x2
-        env.set_variable(1);
+        env.set_variable(2);
         // set_variable, x5
-        env.set_variable(4);
+        env.set_variable(5);
         // put_structure f/1, x4
-        env.put_structure(Functor(f.clone(), 1), 3);
+        env.put_structure(Functor::from("f/1"), 4);
         // set_value, x5
-        env.set_value(4);
+        env.set_value(5);
         // put_structure p/3, x1
-        env.put_structure(Functor(p.clone(), 3), 0);
+        env.put_structure(Functor::from("p/3"), 1);
         // set_value x2
-        env.set_value(1);
-        // set_value x3
         env.set_value(2);
-        // set_value x4
+        // set_value x3
         env.set_value(3);
+        // set_value x4
+        env.set_value(4);
 
         // get_structure p/3, x1
-        env.get_structure(Functor(p.clone(), 3), 0);
+        env.get_structure(Functor::from("p/3"), 1);
         // unify_variable x2
-        env.unify_variable(1);
-        // unify_variable x3
         env.unify_variable(2);
-        // unify_variable x4
+        // unify_variable x3
         env.unify_variable(3);
-        // get_structure f/1, x2
-        env.get_structure(Functor(f.clone(), 1), 1);
-        // unify_variable x5
+        // unify_variable x4
         env.unify_variable(4);
-        // get_structure h/2, x3
-        env.get_structure(Functor(h.clone(), 2), 2);
-        // unify_value x4
-        env.unify_value(3);
-        // unify_variable x6
+        // get_structure f/1, x2
+        env.get_structure(Functor::from("f/1"), 2);
+        // unify_variable x5
         env.unify_variable(5);
-        // get_structure f/1, x6
-        env.get_structure(Functor(f.clone(), 1), 5);
-        // unify_variable x7
+        // get_structure h/2, x3
+        env.get_structure(Functor::from("h/2"), 3);
+        // unify_value x4
+        env.unify_value(4);
+        // unify_variable x6
         env.unify_variable(6);
+        // get_structure f/1, x6
+        env.get_structure(Functor::from("f/1"), 6);
+        // unify_variable x7
+        env.unify_variable(7);
         // get_structure a/0, x7
-        env.get_structure(Functor(a.clone(), 0), 6);
+        env.get_structure(Functor::from("a/0"), 7);
 
         let expected_heap_cells = vec![
             Str(1),
@@ -832,27 +778,35 @@ mod tests {
             Func(Functor(a.clone(), 0))
         ];
 
-        let (heap_cells, registers) = (&env.heap.cells, &env.registers);
-        assert_eq!(heap_cells.clone(), expected_heap_cells);
+//        env.bind(XAddr(6), XAddr(5));
 
-        register_is(registers, 0, Str(8));
-        register_is(registers, 1, Ref(2));
-        register_is(registers, 2, Str(1));
-        register_is(registers, 3, Str(5));
-        register_is(registers, 4, Ref(3));
+        debug!("{:?}\n{:?}\n{:?}.", env.heap.cells, env.registers, !env.fail);
+
+        let (heap_cells, registers) = (&env.heap.cells, &env.registers);
+
+        assert_eq!(heap_cells, &expected_heap_cells);
+
+
+        register_is(registers, 1, Str(8));
+        register_is(registers, 2, Ref(2));
+        register_is(registers, 3, Str(1));
+        register_is(registers, 4, Str(5));
+        register_is(registers, 5, Ref(14));
+        register_is(registers, 6, Ref(3));
+        register_is(registers, 7, Ref(17));
     }
 
     #[test]
     fn test_functor_eq() {
-        let f1 = Functor(String::from("foo"), 1);
-        let f2 = Functor(String::from("bar"), 1);
+        let f1 = Functor::from("foo/1");
+        let f2 = Functor::from("bar/1");
 
         assert_ne!(f1, f2);
 
-        let f2 = Functor(String::from("foo"), 1);
+        let f2 = Functor::from("foo/1");
         assert_eq!(f1, f2);
 
-        let f2 = Functor(String::from("foo"), 2);
+        let f2 = Functor::from("foo/2");
         assert_ne!(f1, f2);
     }
 
