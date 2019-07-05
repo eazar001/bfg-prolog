@@ -91,6 +91,16 @@ impl Debug for Registers {
     }
 }
 
+impl Display for Cell {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
+        match self {
+            Ref(a) => Ok(write!(f, "{:?}", Ref(*a))?),
+            Str(a) => Ok(write!(f, "{:?}", Str(*a))?),
+            Func(f1) => Ok(write!(f, "Functor({})", f1)?)
+        }
+    }
+}
+
 impl Display for Functor {
     fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
         Ok(write!(f, "{}/{}", self.name(), self.arity())?)
@@ -129,7 +139,7 @@ impl Env {
     }
 
     fn push_heap(&mut self, cell: Cell) {
-        trace!("\t\tHEAP[{}] <- {:?}", self.heap_counter(), cell);
+        trace!("\t\tHEAP[{}] <- {}", self.heap_counter(), cell);
 
         self.heap.cells.push(cell);
     }
@@ -431,10 +441,10 @@ impl Env {
         let (a1, a2) = (c1.address().unwrap(), c2. address().unwrap());
 
         if c1.is_ref() && (!c2.is_ref() || a2 < a1) {
-            trace!("\t\tbind: HEAP[{}] <- {:?} ({:?} <- {:?})", a1, c2.clone(), c1.clone(), c2.clone());
+            trace!("\t\tbind: HEAP[{}] <- {:?} | ({:?} <- {:?})", a1, c2.clone(), c1.clone(), c2.clone());
             self.heap.cells[a1] = c2.clone();
         } else {
-            trace!("\t\tbind: HEAP[{}] <- {:?} ({:?} <- {:?})", a2, c1.clone(), c2.clone(), c1.clone());
+            trace!("\t\tbind: HEAP[{}] <- {:?} | ({:?} <- {:?})", a2, c1.clone(), c2.clone(), c1.clone());
             self.heap.cells[a2] = c1.clone();
         }
     }
