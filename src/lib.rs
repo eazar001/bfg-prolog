@@ -319,7 +319,7 @@ impl Env {
 
     // unify_variable Xi
     fn unify_variable(&mut self, xi: Register) {
-        trace!("unify_variable: ");
+        trace!("unify_variable ({:?}): ", self.mode);
         match self.mode {
             Read => {
                 let s = self.get_s();
@@ -569,6 +569,7 @@ mod tests {
     // set_variable Xi
     #[test]
     fn test_set_variable() {
+        init_test_logger();
         let mut env = Env::new();
 
         env.set_variable(0);
@@ -584,6 +585,7 @@ mod tests {
     // set_value Xi
     #[test]
     fn test_set_value() {
+        init_test_logger();
         let mut env = Env::new();
 
         env.set_variable(0);
@@ -605,6 +607,7 @@ mod tests {
     // put_structure f/n, Xi
     #[test]
     fn test_put_structure() {
+        init_test_logger();
         let mut env = Env::new();
 
         env.put_structure(Functor(String::from("foo"), 2), 0);
@@ -632,6 +635,7 @@ mod tests {
 
     #[test]
     fn test_deref() {
+        init_test_logger();
         let mut env = Env::new();
 
         env.heap.cells = vec![
@@ -658,6 +662,8 @@ mod tests {
 
     #[test]
     fn test_exercise_2_1() {
+        init_test_logger();
+
         // L0 program: p(Z, h(Z, W), f(W)).
         let mut env = Env::new();
 
