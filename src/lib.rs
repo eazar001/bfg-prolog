@@ -139,7 +139,7 @@ impl Env {
     }
 
     fn push_heap(&mut self, cell: Cell) {
-        trace!("\t\tHEAP[{}] <- {}", self.heap_counter(), cell);
+        trace!("\t\tHEAP[{}] <- {}", self.heap.cells.len(), cell);
 
         self.heap.cells.push(cell);
     }
@@ -441,10 +441,10 @@ impl Env {
         let (a1, a2) = (c1.address().unwrap(), c2. address().unwrap());
 
         if c1.is_ref() && (!c2.is_ref() || a2 < a1) {
-            trace!("\t\tbind: HEAP[{}] <- {:?} | ({:?} <- {:?})", a1, c2.clone(), c1.clone(), c2.clone());
+            trace!("\t\tbind: HEAP[{}] <- {:?} | ({:?} -> {:?})", a1, c2.clone(), c1.clone(), c2.clone());
             self.heap.cells[a1] = c2.clone();
         } else {
-            trace!("\t\tbind: HEAP[{}] <- {:?} | ({:?} <- {:?})", a2, c1.clone(), c2.clone(), c1.clone());
+            trace!("\t\tbind: HEAP[{}] <- {:?} | ({:?} -> {:?})", a2, c1.clone(), c2.clone(), c1.clone());
             self.heap.cells[a2] = c1.clone();
         }
     }
