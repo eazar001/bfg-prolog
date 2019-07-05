@@ -12,7 +12,8 @@ use std::fmt::{Display, Formatter, Debug};
 use std::cmp::Ordering;
 use machine::instructions::*;
 use env_logger;
-use log::{info, warn, error, debug, trace};
+use log::{info, warn, error, debug, trace, Level};
+use log::Level::*;
 
 
 // heap address represented as usize that corresponds to the vector containing cell data
@@ -86,7 +87,7 @@ impl Debug for Registers {
             write!(f, "{}: {:?}, ", key, self.x[key])?;
         }
 
-        Ok(writeln!(f, "{}: {:?}]", keys.len(), self.x[&keys.len()])?)
+        Ok(write!(f, "{}: {:?}]", keys.len(), self.x[&keys.len()])?)
     }
 }
 
@@ -128,6 +129,8 @@ impl Env {
     }
 
     fn push_heap(&mut self, cell: Cell) {
+        trace!("\t\tHEAP[{}] <- {:?}", self.heap_counter(), cell);
+
         self.heap.cells.push(cell);
     }
 
@@ -136,6 +139,8 @@ impl Env {
     }
 
     fn insert_x(&mut self, xi: Register, cell: Cell) -> Option<Cell> {
+        trace!("\t\tX{} <- {:?}", xi, cell);
+
         self.registers.insert_x(xi, cell)
     }
 
@@ -144,11 +149,20 @@ impl Env {
     }
 
     fn inc_s(&mut self, value: usize) {
+        trace!("\t\tS <- S + {}", value);
         self.registers.s += value;
     }
 
     fn set_s(&mut self, value: usize) {
+        trace!("\t\tS <- {}", value);
+
         self.registers.s = value;
+    }
+
+    fn set_fail(&mut self, value: bool) {
+        trace!("\t\tFail <- {}", value);
+
+        self.fail = value;
     }
 
     fn heap_counter(&self) -> usize {
@@ -156,10 +170,14 @@ impl Env {
     }
 
     fn inc_heap_counter(&mut self, value: usize) {
+        trace!("\t\tH <- H + {}", value);
+
         self.registers.h += value;
     }
 
     fn set_mode(&mut self, mode: Mode) {
+        trace!("\t\tMode <- {:?}", mode);
+
         self.mode = mode;
     }
 
@@ -185,18 +203,12 @@ impl Env {
 
     // put_structure f/n, Xi
     fn put_structure(&mut self, f: Functor, xi: Register) {
+        trace!("put_structure: ");
         let h = self.heap_counter();
 
-        // HEAP[H] <- <STR, H+1>
         self.push_heap(Str(h+1));
-
-        // HEAP[H+1] <- f/n
         self.push_heap(Func(f));
-
-        // Xi <- HEAP[H]
         self.insert_x(xi, self.heap.cells[h].clone());
-
-        // H <- H + 2
         self.inc_heap_counter(2);
     }
 
@@ -204,26 +216,25 @@ impl Env {
     fn set_variable(&mut self, xi: Register) {
         let h = self.heap_counter();
 
-        // HEAP[H] <- <REF, H>
+        trace!("set_variable: ");
+
         self.push_heap(Ref(h));
-
-        // Xi <- HEAP[H]
         self.insert_x(xi, self.heap.cells[h].clone());
-
-        // H <- H + 1
         self.inc_heap_counter(1);
     }
 
     // set_value Xi
     fn set_value(&mut self, xi: Register) {
-        // HEAP[H] <- Xi
-        self.push_heap(self.get_x(xi).cloned().unwrap());
+        trace!("set_value: ");
 
-        // H <- H + 1
+        self.push_heap(self.get_x(xi).cloned().unwrap());
         self.inc_heap_counter(1);
     }
 
-    fn deref(&self, mut address: Store) -> Store {
+    fn deref(&self, address: Store) -> Store {
+        let mut address = address;
+        let start_address = address;
+
         loop {
             let (cell, a) = match address {
                 HeapAddr(addr) => (&self.heap.cells[addr], addr),
@@ -242,17 +253,25 @@ impl Env {
                         address = HeapAddr(*value);
                     } else {
                         // ref cell is unbound return the address
+                        trace!("\t\tderef: {:?} -> {:?}", start_address, address);
                         return address
                     }
                 },
-                Str(addr) => return address,
-                Func(_) => return address
+                Str(addr) => {
+                    trace!("\t\tderef: {:?} -> {:?}", start_address, address);
+                    return address
+                },
+                Func(_) => {
+                    trace!("\t\tderef: {:?} -> {:?}", start_address, address);
+                    return address
+                }
             }
         }
     }
 
     // get_structure f/n, Xi
-    fn get_structure(&mut self, functor: Functor, xi: Register) {
+    fn get_structure(&mut self, f: Functor, xi: Register) {
+        trace!("get_structure: ");
         let (cell, address) = match self.deref(XAddr(xi)) {
             HeapAddr(addr) => (self.heap.cells[addr].clone(), addr),
             XAddr(addr) => (self.get_x(xi).cloned().unwrap(), addr)
@@ -263,35 +282,34 @@ impl Env {
                 let h = self.heap_counter();
 
                 self.push_heap(Str(h+1));
-                self.push_heap(Func(functor.clone()));
+                self.push_heap(Func(f.clone()));
                 self.bind(HeapAddr(address), HeapAddr(h));
 
                 self.inc_heap_counter(2);
                 self.set_mode(Write);
-                trace!("get_structure with {} @ X{} ... Mode set to {:?}", functor, xi, self.mode);
             },
             Str(a) => {
                 match self.heap.cells[a] {
-                    Func(ref s_functor) => {
-                        if s_functor == &functor {
+                    Func(ref functor) => {
+                        if functor == &f {
                             self.set_s(a+1);
                             self.set_mode(Read);
-                            trace!("get_structure with {} @ X{} ... Mode set to {:?}", functor, xi, self.mode);
                         } else {
-                            self.fail = true;
+                            self.set_fail(true);
                         }
                     }
                     _ => panic!()
                 }
             },
             Func(_) => {
-                self.fail = true;
+                self.set_fail(true);
             }
         }
     }
 
     // unify_variable Xi
     fn unify_variable(&mut self, xi: Register) {
+        trace!("unify_variable: ");
         match self.mode {
             Read => {
                 let s = self.get_s();
@@ -312,6 +330,8 @@ impl Env {
 
     // unify_value Xi
     fn unify_value(&mut self, xi: Register) {
+        trace!("unify_value ({:?}): ", self.mode);
+
         match self.mode {
             Read => {
                 let s = self.get_s();
@@ -328,10 +348,12 @@ impl Env {
     }
 
     fn unify(&mut self, a1: Store, a2: Store) {
+        trace!("\t\tunify: {:?} <-> {:?}", a1, a2);
+
         self.push_pdl(a1);
         self.push_pdl(a2);
 
-        self.fail = false;
+        self.set_fail(false);
 
         while !(self.empty_pdl() || self.fail) {
             let (a1, a2) = (self.pop_pdl().unwrap(), self.pop_pdl().unwrap());
@@ -366,7 +388,7 @@ impl Env {
                             self.push_pdl(HeapAddr(v2+i));
                         }
                     } else {
-                        self.fail = true;
+                        self.set_fail(true);
                     }
                 }
             }
@@ -378,6 +400,7 @@ impl Env {
         match cell {
             Str(addr) => {
                 if let Func(f) = self.heap.cells[*addr].clone() {
+                    trace!("\t\tget_functor: {:?} -> {}", cell, f);
                     f
                 } else {
                     error!("encountered a structure that doesn't point to a functor");
@@ -386,6 +409,7 @@ impl Env {
             },
             Func(f) => {
                 warn!("accessing a functor from a functor-cell, but this normally shouldn't happen");
+                trace!("\t\tget_functor: {:?} -> {}", cell, f);
                 f.clone()
             },
             Ref(_) => {
@@ -407,34 +431,11 @@ impl Env {
         let (a1, a2) = (c1.address().unwrap(), c2. address().unwrap());
 
         if c1.is_ref() && (!c2.is_ref() || a2 < a1) {
+            trace!("\t\tbind: HEAP[{}] <- {:?} ({:?} <- {:?})", a1, c2.clone(), c1.clone(), c2.clone());
             self.heap.cells[a1] = c2.clone();
         } else {
+            trace!("\t\tbind: HEAP[{}] <- {:?} ({:?} <- {:?})", a2, c1.clone(), c2.clone(), c1.clone());
             self.heap.cells[a2] = c1.clone();
-        }
-    }
-
-    fn cmp_stores(&self, a1: Store, a2: Store) -> Ordering {
-        match a1.partial_cmp(&a2) {
-            Some(order) => order,
-            None => {
-                let comp = |a| {
-                    match a {
-                        XAddr(a) => {
-                            match self.heap.cells[a] {
-                                Str(a) => a,
-                                Ref(a) => a,
-                                Func(_) => panic!("fatal error")
-                            }
-                        },
-                        HeapAddr(a) => a
-                    }
-                };
-
-
-                let (a1, a2) = (comp(a1), comp(a2));
-
-                a1.cmp(&a2)
-            }
         }
     }
 }
@@ -757,30 +758,32 @@ mod tests {
 
         let expected_heap_cells = vec![
             Str(1),
-            Func(Functor(h.clone(), 2)),
+            Func(Functor::from("h/2")),
             Str(13),
             Str(16),
             Str(5),
-            Func(Functor(f.clone(), 1)),
+            Func(Functor::from("f/1")),
             Ref(3),
             Str(8),
-            Func(Functor(p.clone(), 3)),
+            Func(Functor::from("p/3")),
             Ref(2),
             Str(1),
             Str(5),
             Str(13),
-            Func(Functor(f.clone(), 1)),
+            Func(Functor::from("f/1")),
             Ref(3),
             Str(16),
-            Func(Functor(f.clone(), 1)),
+            Func(Functor::from("f/1")),
             Str(19),
             Str(19),
-            Func(Functor(a.clone(), 0))
+            Func(Functor::from("a/0"))
         ];
 
 //        env.bind(XAddr(6), XAddr(5));
 
-        debug!("{:?}\n{:?}\n{:?}.", env.heap.cells, env.registers, !env.fail);
+        debug!("{:?}", env.heap.cells);
+        debug!("{:?}", env.registers);
+        debug!("{:?}.", !env.fail);
 
         let (heap_cells, registers) = (&env.heap.cells, &env.registers);
 
