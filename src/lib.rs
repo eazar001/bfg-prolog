@@ -203,14 +203,6 @@ impl Env {
         self.pdl.pop()
     }
 
-    fn call(&mut self, _functor: Functor) {
-        unimplemented!()
-    }
-
-    fn proceed(&mut self) {
-//        unimplemented!()
-    }
-
     // put_structure f/n, Xi
     fn put_structure(&mut self, f: Functor, xi: Register) {
         trace!("put_structure: ");
@@ -813,6 +805,35 @@ mod tests {
         register_is(registers, 5, Ref(14));
         register_is(registers, 6, Ref(3));
         register_is(registers, 7, Ref(17));
+    }
+
+    #[test]
+    fn test_unify_variable_read_mode() {
+        init_test_logger();
+
+        let mut env = Env::new();
+
+        env.set_mode(Read);
+        env.push_heap(Ref(3));
+        env.unify_variable(1);
+
+        assert_eq!(env.get_x(1).cloned().unwrap(), Ref(3));
+        assert_eq!(env.get_s(), 1);
+    }
+
+    #[test]
+    fn test_unify_variable_write_mode() {
+        init_test_logger();
+
+        let mut env = Env::new();
+
+        env.set_mode(Write);
+        env.unify_variable(1);
+
+        assert_eq!(env.heap.cells[0], Ref(0));
+        assert_eq!(env.get_x(1).cloned().unwrap(), Ref(0));
+        assert_eq!(env.heap_counter(), 1);
+        assert_eq!(env.get_s(), 1);
     }
 
     #[test]
