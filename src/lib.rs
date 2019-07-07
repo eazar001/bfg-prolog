@@ -176,11 +176,11 @@ impl Env {
         self.fail = value;
     }
 
-    fn heap_counter(&self) -> usize {
+    fn get_h(&self) -> usize {
         self.registers.h
     }
 
-    fn inc_heap_counter(&mut self, value: usize) {
+    fn inc_h(&mut self, value: usize) {
         trace!("\t\tH <- H + {}", value);
 
         self.registers.h += value;
@@ -206,29 +206,29 @@ impl Env {
 
     fn put_structure(&mut self, f: Functor, xi: Register) {
         trace!("put_structure {}, {}:", f, xi);
-        let h = self.heap_counter();
+        let h = self.get_h();
 
         self.push_heap(Str(h+1));
         self.push_heap(Func(f));
         self.insert_x(xi, Str(h+1));
-        self.inc_heap_counter(2);
+        self.inc_h(2);
     }
 
     fn set_variable(&mut self, xi: Register) {
-        let h = self.heap_counter();
+        let h = self.get_h();
 
         trace!("set_variable {}:", xi);
 
         self.push_heap(Ref(h));
         self.insert_x(xi, Ref(h));
-        self.inc_heap_counter(1);
+        self.inc_h(1);
     }
 
     fn set_value(&mut self, xi: Register) {
         trace!("set_value {}:", xi);
 
         self.push_heap(self.get_x(xi).cloned().unwrap());
-        self.inc_heap_counter(1);
+        self.inc_h(1);
     }
 
     fn deref(&self, address: Store) -> Store {
@@ -279,13 +279,13 @@ impl Env {
 
         match cell.clone() {
             Ref(_) => {
-                let h = self.heap_counter();
+                let h = self.get_h();
 
                 self.push_heap(Str(h+1));
                 self.push_heap(Func(f.clone()));
                 self.bind(HeapAddr(address), HeapAddr(h));
 
-                self.inc_heap_counter(2);
+                self.inc_h(2);
                 self.set_mode(Write);
             },
             Str(a) => {
@@ -317,11 +317,11 @@ impl Env {
                 self.insert_x(xi, self.heap.cells[s].clone());
             },
             Write => {
-                let h = self.heap_counter();
+                let h = self.get_h();
 
                 self.push_heap(Ref(h));
                 self.insert_x(xi, Ref(h));
-                self.inc_heap_counter(1);
+                self.inc_h(1);
             }
         }
 
@@ -339,7 +339,7 @@ impl Env {
             },
             Write => {
                 self.push_heap(self.get_x(xi).unwrap().clone());
-                self.inc_heap_counter(1);
+                self.inc_h(1);
             }
         }
 
@@ -815,7 +815,7 @@ mod tests {
 
         assert_eq!(env.heap.cells[0], Ref(0));
         assert_eq!(env.get_x(1).cloned().unwrap(), Ref(0));
-        assert_eq!(env.heap_counter(), 1);
+        assert_eq!(env.get_h(), 1);
         assert_eq!(env.get_s(), 1);
     }
 
