@@ -385,7 +385,7 @@ impl Env {
                     if f1 == f2 {
                         let n1 = f1.arity();
 
-                        for i in 1..n1 {
+                        for i in 1..=n1 {
                             self.push_pdl(HeapAddr(v1+i));
                             self.push_pdl(HeapAddr(v2+i));
                         }
