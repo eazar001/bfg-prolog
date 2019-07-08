@@ -214,6 +214,23 @@ impl Env {
         self.inc_h(2);
     }
 
+    fn put_variable(&mut self, xn: Register, ai: Register) {
+        trace!("put_variable {}, {}", xn, ai);
+
+        let h = self.get_h();
+
+        self.push_heap(Ref(h));
+        self.insert_x(xn, Ref(h));
+        self.insert_x(ai, Ref(h));
+        self.inc_h(1);
+    }
+
+    fn put_value(&mut self, xn: Register, ai: Register) {
+        trace!("put_value {}, {}", xn, ai);
+
+        self.insert_x(ai, self.get_x(xn).cloned().unwrap());
+    }
+
     fn set_variable(&mut self, xi: Register) {
         let h = self.get_h();
 
@@ -267,6 +284,26 @@ impl Env {
                 }
             }
         }
+    }
+
+    fn call(&mut self, f: Functor) {
+        // TODO: implement
+    }
+
+    fn proceed(&mut self) {
+        // TODO: implement
+    }
+
+    fn get_variable(&mut self, xn: Register, ai: Register) {
+        trace!("get_variable {}, {}", xn, ai);
+
+        self.insert_x(xn, self.get_x(ai).cloned().unwrap());
+    }
+
+    fn get_value(&mut self, xn: Register, ai: Register) {
+        trace!("get_value {}, {}", xn, ai);
+
+        self.unify(XAddr(xn), XAddr(ai));
     }
 
     fn get_structure(&mut self, f: Functor, xi: Register) {
@@ -347,7 +384,7 @@ impl Env {
     }
 
     fn unify(&mut self, a1: Store, a2: Store) {
-        trace!("\t\tunify: {:?}, {:?}", a1, a2);
+        trace!("\t\tunify {:?}, {:?}:", a1, a2);
 
         self.push_pdl(a1);
         self.push_pdl(a2);
@@ -367,16 +404,7 @@ impl Env {
                 if c1.is_ref() || c2.is_ref() {
                     self.bind(d1, d2);
                 } else {
-                    let v1 = match c1.address() {
-                        Some(addr) => addr,
-                        None => panic!()
-                    };
-
-                    let v2 = match c2.address() {
-                        Some(addr) => addr,
-                        None => panic!()
-                    };
-
+                    let (v1, v2) = (c1.address().unwrap(), c2.address().unwrap());
                     let (f1, f2) = (self.get_functor(c1), self.get_functor(c2));
 
                     if f1 == f2 {
@@ -788,6 +816,65 @@ mod tests {
         register_is(registers, 5, Ref(14));
         register_is(registers, 6, Ref(3));
         register_is(registers, 7, Ref(17));
+    }
+
+    #[test]
+    fn test_exercise_2_7() {
+//        init_test_logger();
+
+        // p(Z, h(Z, W), f(W)) = p(f(X), h(Y, f(a)), Y).
+        let mut env = Env::new();
+
+        env.put_variable(4, 1);
+        env.put_structure(Functor::from("h/2"), 2);
+        env.set_value(4);
+        env.set_variable(5);
+        env.put_structure(Functor::from("f/1"), 3);
+        env.set_value(5);
+        env.call(Functor::from("p/3"));
+
+        env.get_structure(Functor::from("f/1"), 1);
+        env.unify_variable(4);
+        env.get_structure(Functor::from("h/2"), 2);
+        env.unify_variable(5);
+        env.unify_variable(6);
+        env.get_value(5, 3);
+        env.get_structure(Functor::from("f/1"), 6);
+        env.unify_variable(7);
+        env.get_structure(Functor::from("a/0"), 7);
+        env.proceed();
+
+        let expected_heap_cells = vec![
+            Str(9),
+            Str(2),
+            Func(Functor::from("h/2")),
+            Ref(0),
+            Str(12),
+            Str(6),
+            Func(Functor::from("f/1")),
+            Ref(4),
+            Str(9),
+            Func(Functor::from("f/1")),
+            Ref(4),
+            Str(12),
+            Func(Functor::from("f/1")),
+            Str(15),
+            Str(15),
+            Func(Functor::from("a/0"))
+        ];
+
+
+        let (heap_cells, registers) = (&env.heap.cells, &env.registers);
+        assert_eq!(heap_cells, &expected_heap_cells);
+
+
+        register_is(registers, 1, Ref(0));
+        register_is(registers, 2, Str(2));
+        register_is(registers, 3, Str(6));
+        register_is(registers, 4, Ref(10));
+        register_is(registers, 5, Ref(0));
+        register_is(registers, 6, Ref(4));
+        register_is(registers, 7, Ref(13));
     }
 
     #[test]
