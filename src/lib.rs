@@ -22,6 +22,8 @@ type HeapAddress = usize;
 type Register = usize;
 type FunctorArity = usize;
 type FunctorName = String;
+// the "global stack"
+type Heap = Vec<Cell>;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Functor(pub FunctorName, pub FunctorArity);
@@ -45,13 +47,6 @@ enum Mode {
     Write
 }
 
-// the "global stack"
-#[derive(Debug, Clone, Eq, PartialEq)]
-struct Heap {
-    // all the data that resides on the heap
-    cells: Vec<Cell>
-}
-
 #[derive(Clone, Eq, PartialEq)]
 struct Registers {
     // the "h" counter contains the location of the next cell to be pushed onto the heap
@@ -67,7 +62,7 @@ struct Registers {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Env {
+pub struct Machine {
     heap: Heap,
     // the "push-down-list" contains StoreAddresses and serves as a unification stack
     pdl: Vec<Store>,
@@ -127,9 +122,9 @@ impl Functor {
     }
 }
 
-impl Env {
-    pub fn new() -> Env {
-        Env {
+impl Machine {
+    pub fn new() -> Machine {
+        Machine {
             heap: Heap::new(),
             pdl: Vec::new(),
             registers: Registers::new(),
@@ -139,9 +134,9 @@ impl Env {
     }
 
     fn push_heap(&mut self, cell: Cell) {
-        trace!("\t\tHEAP[{}] <- {}", self.heap.cells.len(), cell);
+        trace!("\t\tHEAP[{}] <- {}", self.heap.len(), cell);
 
-        self.heap.cells.push(cell);
+        self.heap.push(cell);
     }
 
     fn get_x(&self, xi: Register) -> Option<&Cell> {
@@ -180,6 +175,22 @@ impl Env {
         self.registers.h
     }
 
+    fn get_p(&self) -> usize {
+        self.registers.p
+    }
+
+    fn set_p(&mut self, value: usize) {
+        self.registers.p = value;
+    }
+
+    fn get_cp(&self) -> usize {
+        self.registers.cp
+    }
+
+    fn set_cp(&mut self, value: usize) {
+        self.registers.cp = value;
+    }
+
     fn inc_h(&mut self, value: usize) {
         trace!("\t\tH <- H + {}", value);
 
@@ -206,6 +217,7 @@ impl Env {
 
     fn put_structure(&mut self, f: Functor, xi: Register) {
         trace!("put_structure {}, {}:", f, xi);
+
         let h = self.get_h();
 
         self.push_heap(Str(h+1));
@@ -254,7 +266,7 @@ impl Env {
 
         loop {
             let (cell, a) = match address {
-                HeapAddr(addr) => (&self.heap.cells[addr], addr),
+                HeapAddr(addr) => (&self.heap[addr], addr),
                 XAddr(addr) => {
                     let e = &format!("Illegal access: register {}, does not exist", addr);
                     let c = self.get_x(addr).expect(e);
@@ -287,11 +299,25 @@ impl Env {
     }
 
     fn call(&mut self, f: Functor) {
-        // TODO: implement
+        let p = self.get_p();
+
+        self.set_cp(p + self.instruction_size(p));
+        self.set_p(self.cp_address(f));
+    }
+
+    fn instruction_size(&self, p: usize) -> usize {
+        1
+//        unimplemented!()
+    }
+
+    // address of procedure in the code area
+    fn cp_address(&self, f: Functor) -> usize {
+        1
+//        unimplemented!()
     }
 
     fn proceed(&mut self) {
-        // TODO: implement
+        self.set_p(self.get_cp());
     }
 
     fn get_variable(&mut self, xn: Register, ai: Register) {
@@ -310,7 +336,7 @@ impl Env {
         trace!("get_structure {}, {}:", f, xi);
 
         let (cell, address) = match self.deref(XAddr(xi)) {
-            HeapAddr(addr) => (&self.heap.cells[addr], addr),
+            HeapAddr(addr) => (&self.heap[addr], addr),
             XAddr(addr) => (self.get_x(xi).unwrap(), addr)
         };
 
@@ -326,7 +352,7 @@ impl Env {
                 self.set_mode(Write);
             },
             Str(a) => {
-                match self.heap.cells[a] {
+                match self.heap[a] {
                     Func(ref functor) => {
                         if *functor == f {
                             self.set_s(a+1);
@@ -351,7 +377,7 @@ impl Env {
             Read => {
                 let s = self.get_s();
 
-                self.insert_x(xi, self.heap.cells[s].clone());
+                self.insert_x(xi, self.heap[s].clone());
             },
             Write => {
                 let h = self.get_h();
@@ -426,7 +452,7 @@ impl Env {
     fn get_functor<'a>(&'a self, cell: &'a Cell) -> &'a Functor {
         match cell {
             Str(addr) => {
-                if let Func(f) = &self.heap.cells[*addr] {
+                if let Func(f) = &self.heap[*addr] {
                     trace!("\t\tget_functor: {:?} -> {}", cell, f);
                     &f
                 } else {
@@ -448,7 +474,7 @@ impl Env {
 
     fn get_store_cell(&self, address: Store) -> &Cell {
         match address {
-            HeapAddr(addr) => &self.heap.cells[addr],
+            HeapAddr(addr) => &self.heap[addr],
             XAddr(addr) => self.get_x(addr).unwrap()
         }
     }
@@ -459,10 +485,10 @@ impl Env {
 
         if c1.is_ref() && (!c2.is_ref() || a2 < a1) {
             trace!("\t\tbind: HEAP[{1}] <- {:2?} | ({:3?} -> {:2?})", a1, c2.clone(), c1.clone());
-            self.heap.cells[a1] = c2.clone();
+            self.heap[a1] = c2.clone();
         } else {
             trace!("\t\tbind: HEAP[{1}] <- {:2?} | ({:3?} -> {:2?})", a2, c1.clone(), c2.clone());
-            self.heap.cells[a2] = c1.clone();
+            self.heap[a2] = c1.clone();
         }
     }
 }
@@ -484,14 +510,6 @@ impl Registers {
 
     fn insert_x(&mut self, register: Register, cell: Cell) -> Option<Cell> {
         self.x.insert(register, cell)
-    }
-}
-
-impl Heap {
-    fn new() -> Heap {
-        Heap {
-            cells: Vec::new()
-        }
     }
 }
 
@@ -586,13 +604,13 @@ mod tests {
     #[test]
     fn test_set_variable() {
 //        init_test_logger();
-        let mut env = Env::new();
+        let mut m = Machine::new();
 
-        env.set_variable(0);
+        m.set_variable(0);
 
         let expected_heap_cells = vec![Ref(0)];
-        let heap_cells = env.heap.cells;
-        let registers = env.registers;
+        let heap_cells = m.heap;
+        let registers = m.registers;
 
         assert_eq!(heap_cells, expected_heap_cells);
         register_is(&registers, 0, Ref(0));
@@ -601,17 +619,17 @@ mod tests {
     #[test]
     fn test_set_value() {
 //        init_test_logger();
-        let mut env = Env::new();
+        let mut m = Machine::new();
 
-        env.set_variable(0);
-        env.set_variable(1);
+        m.set_variable(0);
+        m.set_variable(1);
 
-        env.set_value(0);
-        env.set_value(1);
+        m.set_value(0);
+        m.set_value(1);
 
         let expected_heap_cells = vec![Ref(0), Ref(1), Ref(0), Ref(1)];
-        let heap_cells = env.heap.cells;
-        let registers = env.registers;
+        let heap_cells = m.heap;
+        let registers = m.registers;
 
         assert_eq!(heap_cells, expected_heap_cells);
         register_is(&registers, 0, Ref(0));
@@ -622,12 +640,12 @@ mod tests {
     #[test]
     fn test_put_structure() {
 //        init_test_logger();
-        let mut env = Env::new();
+        let mut m = Machine::new();
 
-        env.put_structure(Functor(String::from("foo"), 2), 0);
-        env.set_variable(1);
-        env.set_variable(2);
-        env.set_value(1);
+        m.put_structure(Functor(String::from("foo"), 2), 0);
+        m.set_variable(1);
+        m.set_variable(2);
+        m.set_value(1);
 
         let expected_heap_cells = vec![
             Str(1),
@@ -637,8 +655,8 @@ mod tests {
             Ref(2)
         ];
 
-        let heap_cells = env.heap.cells;
-        let registers = env.registers;
+        let heap_cells = m.heap;
+        let registers = m.registers;
 
         assert_eq!(heap_cells, expected_heap_cells);
         register_is(&registers, 0, Str(1));
@@ -650,9 +668,9 @@ mod tests {
     #[test]
     fn test_deref() {
 //        init_test_logger();
-        let mut env = Env::new();
+        let mut m = Machine::new();
 
-        env.heap.cells = vec![
+        m.heap = vec![
             Ref(2),
             Ref(3),
             Ref(1),
@@ -662,16 +680,16 @@ mod tests {
             Ref(3)
         ];
 
-        env.insert_x(3, Ref(4));
+        m.insert_x(3, Ref(4));
 
-        assert_eq!(env.deref(HeapAddr(0)), HeapAddr(3));
-        assert_eq!(env.deref(HeapAddr(1)), HeapAddr(3));
-        assert_eq!(env.deref(HeapAddr(2)), HeapAddr(3));
-        assert_eq!(env.deref(HeapAddr(3)), HeapAddr(3));
-        assert_eq!(env.deref(HeapAddr(4)), HeapAddr(4));
-        assert_eq!(env.deref(HeapAddr(5)), HeapAddr(5));
-        assert_eq!(env.deref(HeapAddr(6)), HeapAddr(3));
-        assert_eq!(env.deref(XAddr(3)), HeapAddr(4));
+        assert_eq!(m.deref(HeapAddr(0)), HeapAddr(3));
+        assert_eq!(m.deref(HeapAddr(1)), HeapAddr(3));
+        assert_eq!(m.deref(HeapAddr(2)), HeapAddr(3));
+        assert_eq!(m.deref(HeapAddr(3)), HeapAddr(3));
+        assert_eq!(m.deref(HeapAddr(4)), HeapAddr(4));
+        assert_eq!(m.deref(HeapAddr(5)), HeapAddr(5));
+        assert_eq!(m.deref(HeapAddr(6)), HeapAddr(3));
+        assert_eq!(m.deref(XAddr(3)), HeapAddr(4));
     }
 
     #[test]
@@ -679,30 +697,26 @@ mod tests {
 //        init_test_logger();
 
         // L0 program: p(Z, h(Z, W), f(W)).
-        let mut env = Env::new();
-
-        let h = String::from("h");
-        let f = String::from("f");
-        let p = String::from("p");
+        let mut m = Machine::new();
 
         // put_structure h/2, x3
-        env.put_structure(Functor::from("h/2"), 3);
+        m.put_structure(Functor::from("h/2"), 3);
         // set_variable, x2
-        env.set_variable(2);
+        m.set_variable(2);
         // set_variable, x5
-        env.set_variable(5);
+        m.set_variable(5);
         // put_structure f/1, x4
-        env.put_structure(Functor::from("f/1"), 4);
+        m.put_structure(Functor::from("f/1"), 4);
         // set_value, x5
-        env.set_value(5);
+        m.set_value(5);
         // put_structure p/3, x1
-        env.put_structure(Functor::from("p/3"), 1);
+        m.put_structure(Functor::from("p/3"), 1);
         // set_value x2
-        env.set_value(2);
+        m.set_value(2);
         // set_value x3
-        env.set_value(3);
+        m.set_value(3);
         // set_value x4
-        env.set_value(4);
+        m.set_value(4);
 
 
         let expected_heap_cells = vec![
@@ -720,7 +734,7 @@ mod tests {
             Str(5),
         ];
 
-        let (heap_cells, registers) = (env.heap.cells, &env.registers);
+        let (heap_cells, registers) = (m.heap, &m.registers);
         assert_eq!(heap_cells, expected_heap_cells);
 
         register_is(registers, 1, Str(8));
@@ -735,51 +749,51 @@ mod tests {
 //        init_test_logger();
 
         // p(Z, h(Z, W), f(W)) = p(f(X), h(Y, f(a)), Y).
-        let mut env = Env::new();
+        let mut m = Machine::new();
 
         // put_structure h/2, x3
-        env.put_structure(Functor::from("h/2"), 3);
+        m.put_structure(Functor::from("h/2"), 3);
         // set_variable, x2
-        env.set_variable(2);
+        m.set_variable(2);
         // set_variable, x5
-        env.set_variable(5);
+        m.set_variable(5);
         // put_structure f/1, x4
-        env.put_structure(Functor::from("f/1"), 4);
+        m.put_structure(Functor::from("f/1"), 4);
         // set_value, x5
-        env.set_value(5);
+        m.set_value(5);
         // put_structure p/3, x1
-        env.put_structure(Functor::from("p/3"), 1);
+        m.put_structure(Functor::from("p/3"), 1);
         // set_value x2
-        env.set_value(2);
+        m.set_value(2);
         // set_value x3
-        env.set_value(3);
+        m.set_value(3);
         // set_value x4
-        env.set_value(4);
+        m.set_value(4);
 
         // get_structure p/3, x1
-        env.get_structure(Functor::from("p/3"), 1);
+        m.get_structure(Functor::from("p/3"), 1);
         // unify_variable x2
-        env.unify_variable(2);
+        m.unify_variable(2);
         // unify_variable x3
-        env.unify_variable(3);
+        m.unify_variable(3);
         // unify_variable x4
-        env.unify_variable(4);
+        m.unify_variable(4);
         // get_structure f/1, x2
-        env.get_structure(Functor::from("f/1"), 2);
+        m.get_structure(Functor::from("f/1"), 2);
         // unify_variable x5
-        env.unify_variable(5);
+        m.unify_variable(5);
         // get_structure h/2, x3
-        env.get_structure(Functor::from("h/2"), 3);
+        m.get_structure(Functor::from("h/2"), 3);
         // unify_value x4
-        env.unify_value(4);
+        m.unify_value(4);
         // unify_variable x6
-        env.unify_variable(6);
+        m.unify_variable(6);
         // get_structure f/1, x6
-        env.get_structure(Functor::from("f/1"), 6);
+        m.get_structure(Functor::from("f/1"), 6);
         // unify_variable x7
-        env.unify_variable(7);
+        m.unify_variable(7);
         // get_structure a/0, x7
-        env.get_structure(Functor::from("a/0"), 7);
+        m.get_structure(Functor::from("a/0"), 7);
 
         let expected_heap_cells = vec![
             Str(1),
@@ -805,7 +819,7 @@ mod tests {
         ];
 
 
-        let (heap_cells, registers) = (&env.heap.cells, &env.registers);
+        let (heap_cells, registers) = (&m.heap, &m.registers);
         assert_eq!(heap_cells, &expected_heap_cells);
 
 
@@ -823,26 +837,26 @@ mod tests {
 //        init_test_logger();
 
         // p(Z, h(Z, W), f(W)) = p(f(X), h(Y, f(a)), Y).
-        let mut env = Env::new();
+        let mut m = Machine::new();
 
-        env.put_variable(4, 1);
-        env.put_structure(Functor::from("h/2"), 2);
-        env.set_value(4);
-        env.set_variable(5);
-        env.put_structure(Functor::from("f/1"), 3);
-        env.set_value(5);
-        env.call(Functor::from("p/3"));
+        m.put_variable(4, 1);
+        m.put_structure(Functor::from("h/2"), 2);
+        m.set_value(4);
+        m.set_variable(5);
+        m.put_structure(Functor::from("f/1"), 3);
+        m.set_value(5);
+        m.call(Functor::from("p/3"));
 
-        env.get_structure(Functor::from("f/1"), 1);
-        env.unify_variable(4);
-        env.get_structure(Functor::from("h/2"), 2);
-        env.unify_variable(5);
-        env.unify_variable(6);
-        env.get_value(5, 3);
-        env.get_structure(Functor::from("f/1"), 6);
-        env.unify_variable(7);
-        env.get_structure(Functor::from("a/0"), 7);
-        env.proceed();
+        m.get_structure(Functor::from("f/1"), 1);
+        m.unify_variable(4);
+        m.get_structure(Functor::from("h/2"), 2);
+        m.unify_variable(5);
+        m.unify_variable(6);
+        m.get_value(5, 3);
+        m.get_structure(Functor::from("f/1"), 6);
+        m.unify_variable(7);
+        m.get_structure(Functor::from("a/0"), 7);
+        m.proceed();
 
         let expected_heap_cells = vec![
             Str(9),
@@ -864,7 +878,7 @@ mod tests {
         ];
 
 
-        let (heap_cells, registers) = (&env.heap.cells, &env.registers);
+        let (heap_cells, registers) = (&m.heap, &m.registers);
         assert_eq!(heap_cells, &expected_heap_cells);
 
 
@@ -881,29 +895,29 @@ mod tests {
     fn test_unify_variable_read_mode() {
 //        init_test_logger();
 
-        let mut env = Env::new();
+        let mut m = Machine::new();
 
-        env.set_mode(Read);
-        env.push_heap(Ref(3));
-        env.unify_variable(1);
+        m.set_mode(Read);
+        m.push_heap(Ref(3));
+        m.unify_variable(1);
 
-        assert_eq!(env.get_x(1).cloned().unwrap(), Ref(3));
-        assert_eq!(env.get_s(), 1);
+        assert_eq!(m.get_x(1).cloned().unwrap(), Ref(3));
+        assert_eq!(m.get_s(), 1);
     }
 
     #[test]
     fn test_unify_variable_write_mode() {
 //        init_test_logger();
 
-        let mut env = Env::new();
+        let mut m = Machine::new();
 
-        env.set_mode(Write);
-        env.unify_variable(1);
+        m.set_mode(Write);
+        m.unify_variable(1);
 
-        assert_eq!(env.heap.cells[0], Ref(0));
-        assert_eq!(env.get_x(1).cloned().unwrap(), Ref(0));
-        assert_eq!(env.get_h(), 1);
-        assert_eq!(env.get_s(), 1);
+        assert_eq!(m.heap[0], Ref(0));
+        assert_eq!(m.get_x(1).cloned().unwrap(), Ref(0));
+        assert_eq!(m.get_h(), 1);
+        assert_eq!(m.get_s(), 1);
     }
 
     #[test]
