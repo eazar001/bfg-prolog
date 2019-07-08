@@ -140,13 +140,13 @@ impl Machine {
     }
 
     fn get_x(&self, xi: Register) -> Option<&Cell> {
-        self.registers.get_x(xi)
+        self.registers.x.get(&xi)
     }
 
     fn insert_x(&mut self, xi: Register, cell: Cell) -> Option<Cell> {
         trace!("\t\tX{} <- {:?}", xi, cell);
 
-        self.registers.insert_x(xi, cell)
+        self.registers.x.insert(xi, cell)
     }
 
     fn get_s(&self) -> Register {
@@ -503,14 +503,6 @@ impl Registers {
             cp: 0
         }
     }
-
-    fn get_x(&self, register: Register) -> Option<&Cell> {
-        self.x.get(&register)
-    }
-
-    fn insert_x(&mut self, register: Register, cell: Cell) -> Option<Cell> {
-        self.x.insert(register, cell)
-    }
 }
 
 impl Cell {
@@ -609,11 +601,10 @@ mod tests {
         m.set_variable(0);
 
         let expected_heap_cells = vec![Ref(0)];
-        let heap_cells = m.heap;
-        let registers = m.registers;
+        let heap_cells = &m.heap;
 
-        assert_eq!(heap_cells, expected_heap_cells);
-        register_is(&registers, 0, Ref(0));
+        assert_eq!(heap_cells, &expected_heap_cells);
+        register_is(&m, 0, Ref(0));
     }
 
     #[test]
@@ -628,13 +619,12 @@ mod tests {
         m.set_value(1);
 
         let expected_heap_cells = vec![Ref(0), Ref(1), Ref(0), Ref(1)];
-        let heap_cells = m.heap;
-        let registers = m.registers;
+        let heap_cells = &m.heap;
 
-        assert_eq!(heap_cells, expected_heap_cells);
-        register_is(&registers, 0, Ref(0));
-        register_is(&registers, 1, Ref(1));
-        assert_eq!(registers.x.len(), 2);
+        assert_eq!(heap_cells, &expected_heap_cells);
+        register_is(&m, 0, Ref(0));
+        register_is(&m, 1, Ref(1));
+        assert_eq!(m.registers.x.len(), 2);
     }
 
     #[test]
@@ -655,14 +645,13 @@ mod tests {
             Ref(2)
         ];
 
-        let heap_cells = m.heap;
-        let registers = m.registers;
+        let heap_cells = &m.heap;
 
-        assert_eq!(heap_cells, expected_heap_cells);
-        register_is(&registers, 0, Str(1));
-        register_is(&registers, 1, Ref(2));
-        register_is(&registers, 2, Ref(3));
-        assert_eq!(registers.x.len(), 3);
+        assert_eq!(heap_cells, &expected_heap_cells);
+        register_is(&m, 0, Str(1));
+        register_is(&m, 1, Ref(2));
+        register_is(&m, 2, Ref(3));
+        assert_eq!(m.registers.x.len(), 3);
     }
 
     #[test]
@@ -734,14 +723,14 @@ mod tests {
             Str(5),
         ];
 
-        let (heap_cells, registers) = (m.heap, &m.registers);
-        assert_eq!(heap_cells, expected_heap_cells);
+        let heap_cells = &m.heap;
+        assert_eq!(heap_cells, &expected_heap_cells);
 
-        register_is(registers, 1, Str(8));
-        register_is(registers, 2, Ref(2));
-        register_is(registers, 3, Str(1));
-        register_is(registers, 4, Str(5));
-        register_is(registers, 5, Ref(3));
+        register_is(&m, 1, Str(8));
+        register_is(&m, 2, Ref(2));
+        register_is(&m, 3, Str(1));
+        register_is(&m, 4, Str(5));
+        register_is(&m, 5, Ref(3));
     }
 
     #[test]
@@ -819,17 +808,17 @@ mod tests {
         ];
 
 
-        let (heap_cells, registers) = (&m.heap, &m.registers);
+        let heap_cells = &m.heap;
         assert_eq!(heap_cells, &expected_heap_cells);
 
 
-        register_is(registers, 1, Str(8));
-        register_is(registers, 2, Ref(2));
-        register_is(registers, 3, Str(1));
-        register_is(registers, 4, Str(5));
-        register_is(registers, 5, Ref(14));
-        register_is(registers, 6, Ref(3));
-        register_is(registers, 7, Ref(17));
+        register_is(&m, 1, Str(8));
+        register_is(&m, 2, Ref(2));
+        register_is(&m, 3, Str(1));
+        register_is(&m, 4, Str(5));
+        register_is(&m, 5, Ref(14));
+        register_is(&m, 6, Ref(3));
+        register_is(&m, 7, Ref(17));
     }
 
     #[test]
@@ -878,17 +867,17 @@ mod tests {
         ];
 
 
-        let (heap_cells, registers) = (&m.heap, &m.registers);
+        let heap_cells = &m.heap;
         assert_eq!(heap_cells, &expected_heap_cells);
 
 
-        register_is(registers, 1, Ref(0));
-        register_is(registers, 2, Str(2));
-        register_is(registers, 3, Str(6));
-        register_is(registers, 4, Ref(10));
-        register_is(registers, 5, Ref(0));
-        register_is(registers, 6, Ref(4));
-        register_is(registers, 7, Ref(13));
+        register_is(&m, 1, Ref(0));
+        register_is(&m, 2, Str(2));
+        register_is(&m, 3, Str(6));
+        register_is(&m, 4, Ref(10));
+        register_is(&m, 5, Ref(0));
+        register_is(&m, 6, Ref(4));
+        register_is(&m, 7, Ref(13));
     }
 
     #[test]
@@ -934,7 +923,7 @@ mod tests {
         assert_ne!(f1, f2);
     }
 
-    fn register_is(registers: &Registers, register: Register, cell: Cell) {
-        assert_eq!(registers.get_x(register).cloned().unwrap(), cell);
+    fn register_is(machine: &Machine, register: Register, cell: Cell) {
+        assert_eq!(machine.get_x(register).cloned().unwrap(), cell);
     }
 }
