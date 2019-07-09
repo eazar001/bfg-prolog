@@ -112,6 +112,12 @@ impl From<&str> for Functor {
     }
 }
 
+impl From<&str> for Cell {
+    fn from(s: &str) -> Cell {
+        Func(Functor::from(s))
+    }
+}
+
 impl Functor {
     pub fn name(&self) -> &str {
         &self.0
@@ -639,7 +645,7 @@ mod tests {
 
         let expected_heap_cells = vec![
             Str(1),
-            Func(Functor::from("foo/2")),
+            Cell::from("foo/2"),
             Ref(2),
             Ref(3),
             Ref(2)
@@ -665,7 +671,7 @@ mod tests {
             Ref(1),
             Ref(3),
             Str(5),
-            Func(Functor::from("f/2")),
+            Cell::from("f/2"),
             Ref(3)
         ];
 
@@ -710,14 +716,14 @@ mod tests {
 
         let expected_heap_cells = vec![
             Str(1),
-            Func(Functor::from("h/2")),
+            Cell::from("h/2"),
             Ref(2),
             Ref(3),
             Str(5),
-            Func(Functor::from("f/1")),
+            Cell::from("f/1"),
             Ref(3),
             Str(8),
-            Func(Functor::from("p/3")),
+            Cell::from("p/3"),
             Ref(2),
             Str(1),
             Str(5),
@@ -786,25 +792,25 @@ mod tests {
 
         let expected_heap_cells = vec![
             Str(1),
-            Func(Functor::from("h/2")),
+            Cell::from("h/2"),
             Str(13),
             Str(16),
             Str(5),
-            Func(Functor::from("f/1")),
+            Cell::from("f/1"),
             Ref(3),
             Str(8),
-            Func(Functor::from("p/3")),
+            Cell::from("p/3"),
             Ref(2),
             Str(1),
             Str(5),
             Str(13),
-            Func(Functor::from("f/1")),
+            Cell::from("f/1"),
             Ref(3),
             Str(16),
-            Func(Functor::from("f/1")),
+            Cell::from("f/1"),
             Str(19),
             Str(19),
-            Func(Functor::from("a/0"))
+            Cell::from("a/0")
         ];
 
 
@@ -850,20 +856,20 @@ mod tests {
         let expected_heap_cells = vec![
             Str(9),
             Str(2),
-            Func(Functor::from("h/2")),
+            Cell::from("h/2"),
             Ref(0),
             Str(12),
             Str(6),
-            Func(Functor::from("f/1")),
+            Cell::from("f/1"),
             Ref(4),
             Str(9),
-            Func(Functor::from("f/1")),
+            Cell::from("f/1"),
             Ref(4),
             Str(12),
-            Func(Functor::from("f/1")),
+            Cell::from("f/1"),
             Str(15),
             Str(15),
-            Func(Functor::from("a/0"))
+            Cell::from("a/0")
         ];
 
 
