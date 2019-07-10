@@ -1,0 +1,22 @@
+use std::str::FromStr;
+
+grammar;
+
+
+pub Atom: &'input str = {
+    // unquoted atoms
+    <r"[a-z]+[A-Za-z_0-9]*">,
+    // quoted atoms
+    <r"'[A-Za-z0-9_]*'">
+};
+
+pub Number: i32 = {
+    // integers
+    <i:r"[0-9]+"> => i32::from_str(i).unwrap(),
+    // floats
+//    <r"[0-9]+\.[0-9]+">
+};
+
+//pub Compound: &'input str = {
+//
+//}

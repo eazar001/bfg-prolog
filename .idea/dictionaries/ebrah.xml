@@ -3,6 +3,7 @@
     <words>
       <w>addr</w>
       <w>deref</w>
+      <w>prolog</w>
       <w>subterm</w>
       <w>usize</w>
     </words>
