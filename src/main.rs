@@ -1,10 +1,12 @@
 #![allow(unused)]
 
-use bfg_prolog::{Machine, Functor};
+pub mod ast;
+
+
 use lalrpop_util::lalrpop_mod;
 
-
 lalrpop_mod!(pub parser);
+
 
 fn main() {
     let atom_parser = parser::AtomParser::new();
@@ -28,12 +30,19 @@ fn main() {
     assert!(number_parser.parse("2").is_ok());
     assert!(number_parser.parse("42").is_ok());
     assert!(number_parser.parse("34345354").is_ok());
-//    assert!(number_parser.parse("3.3").is_ok());
-//    assert!(number_parser.parse("3.30").is_ok());
-//    assert!(number_parser.parse("0.3").is_ok());
+    assert!(number_parser.parse("3.3").is_ok());
+    assert!(number_parser.parse("3.30").is_ok());
+    assert!(number_parser.parse("0.3").is_ok());
     assert!(number_parser.parse("a03").is_err());
     assert!(number_parser.parse("_21").is_err());
     assert!(number_parser.parse("2_12").is_err());
     assert!(number_parser.parse(".3").is_err());
     assert!(number_parser.parse("2.").is_err());
+
+    let c = parser::CompoundParser::new();
+
+    // compounds
+    let s = c.parse("foo(bar(a, b, c, d, e), b, 1, X, 3.4, baz(c))").unwrap();
+
+    println!("{:?}", s);
 }

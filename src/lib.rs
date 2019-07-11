@@ -2,7 +2,6 @@
 #![allow(unused)]
 #![allow(clippy::new_without_default)]
 
-mod machine;
 
 use self::Cell::*;
 use self::Store::*;
@@ -10,7 +9,6 @@ use self::Mode::{Read, Write};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter, Debug};
 use std::cmp::Ordering;
-use machine::instructions::*;
 use env_logger;
 use log::{info, warn, error, debug, trace, Level};
 use log::Level::*;

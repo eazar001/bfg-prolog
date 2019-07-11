@@ -1,22 +1,74 @@
 use std::str::FromStr;
+use crate::ast::*;
 
 grammar;
 
 
-pub Atom: &'input str = {
+pub Comma: &'input str = {
+    ","
+};
+
+pub Args: Vec<Term> = {
+    <var:Var> <c:Comma> <args:Args> => {
+        let mut v = vec![Term::VarTerm(var)];
+        v.extend(args);
+        v
+    },
+    <n:Number> <c:Comma> <args:Args> => {
+        let mut v = vec![Term::NumberTerm(n)];
+        v.extend(args);
+        v
+    },
+    <a:Atom> <c:Comma> <args:Args> => {
+        let mut v = vec![Term::AtomTerm(a)];
+        v.extend(args);
+        v
+    },
+    <compound:Compound> <sub_compound:Comma> <args:Args> => {
+        let mut v = vec![Term::CompoundTerm(compound)];
+        v.extend(args);
+        v
+    },
+    <v:Var> ")" => vec![Term::VarTerm(v)],
+    <n:Number> ")" => vec![Term::NumberTerm(n)],
+    <a:Atom> ")" => vec![Term::AtomTerm(a)],
+    <c:Compound> ")" => vec![Term::CompoundTerm(c)]
+};
+
+pub Atom: Atom = {
     // unquoted atoms
-    <r"[a-z]+[A-Za-z_0-9]*">,
+    <r"[a-z]+[A-Za-z_0-9]*"> => Atom(<>.parse().unwrap()),
     // quoted atoms
-    <r"'[A-Za-z0-9_]*'">
+    <r"'[A-Za-z0-9_]*'"> => Atom(<>.parse().unwrap())
 };
 
-pub Number: i32 = {
+pub Number: Number = {
     // integers
-    <i:r"[0-9]+"> => i32::from_str(i).unwrap(),
+    <r"[0-9]+"> => Number::Integer(<>.parse().unwrap()),
     // floats
-//    <r"[0-9]+\.[0-9]+">
+    <r"[0-9]+\.[0-9]+"> => Number::Float(<>.parse().unwrap())
 };
 
-//pub Compound: &'input str = {
-//
-//}
+pub Var: Var = {
+    // leading underscore variables (anonymous)
+    <r"_[A-Za-z0-9_]+"> => Var(String::from(<>)),
+    // Capital first variables
+    <r"[A-Z][A-Za-z0-9_]*"> => Var(String::from(<>))
+};
+
+pub FunctorName: String = {
+    <name:r"[a-z]+[A-Za-z_0-9]*\("> => {
+        let s = &name[..name.len()-1];
+
+        String::from(s)
+    }
+};
+
+pub Compound: Compound = {
+    <name:FunctorName> <args:Args> => {
+        let arity = args.len();
+        let mut args = args;
+
+        Compound { name: name, arity: arity, args: args }
+    }
+};
