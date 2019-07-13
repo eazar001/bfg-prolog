@@ -11,6 +11,7 @@ use std::collections::{HashMap};
 lalrpop_mod!(pub parser);
 
 
+// TODO: make this iterative
 fn allocate_registers(compound: &Compound, x: &mut i32, m: &mut HashMap<Term, i32>) {
     let term = Term::CompoundTerm(compound.clone());
 
@@ -27,11 +28,8 @@ fn allocate_registers(compound: &Compound, x: &mut i32, m: &mut HashMap<Term, i3
     }
 
     for t in &compound.args {
-        match &t {
-            Term::CompoundTerm(ref c) => {
-                allocate_registers(c, x, m)
-            },
-            _ => ()
+        if let Term::CompoundTerm(c) = t {
+            allocate_registers(c, x, m)
         }
     }
 }
