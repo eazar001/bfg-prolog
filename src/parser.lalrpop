@@ -10,29 +10,41 @@ pub Comma: &'input str = {
 
 pub Args: Vec<Term> = {
     <var:Var> <c:Comma> <args:Args> => {
-        let mut v = vec![Term::VarTerm(var)];
-        v.extend(args);
-        v
+        let mut args = args;
+        args.push(Term::VarTerm(var));
+        args
     },
     <n:Number> <c:Comma> <args:Args> => {
-        let mut v = vec![Term::NumberTerm(n)];
-        v.extend(args);
-        v
+        let mut args = args;
+        args.push(Term::NumberTerm(n));
+        args
     },
     <a:Atom> <c:Comma> <args:Args> => {
-        let mut v = vec![Term::AtomTerm(a)];
-        v.extend(args);
-        v
+        let mut args = args;
+        args.push(Term::AtomTerm(a));
+        args
     },
-    <compound:Compound> <sub_compound:Comma> <args:Args> => {
-        let mut v = vec![Term::CompoundTerm(compound)];
-        v.extend(args);
-        v
+    <compound:Compound> <c:Comma> <args:Args> => {
+        let mut args = args;
+        args.push(Term::CompoundTerm(compound));
+        args
     },
-    <v:Var> ")" => vec![Term::VarTerm(v)],
-    <n:Number> ")" => vec![Term::NumberTerm(n)],
-    <a:Atom> ")" => vec![Term::AtomTerm(a)],
-    <c:Compound> ")" => vec![Term::CompoundTerm(c)]
+    <v:Var> ")" => {
+        let mut args = vec![Term::VarTerm(v)];
+        args
+    },
+    <n:Number> ")" => {
+        let mut args = vec![Term::NumberTerm(n)];
+        args
+    },
+    <a:Atom> ")" => {
+        let mut args = vec![Term::AtomTerm(a)];
+        args
+    },
+    <c:Compound> ")" => {
+        let mut args = vec![Term::CompoundTerm(c)];
+        args
+    }
 };
 
 pub Atom: Atom = {
@@ -68,6 +80,7 @@ pub Compound: Compound = {
     <name:FunctorName> <args:Args> => {
         let arity = args.len();
         let mut args = args;
+        args.reverse();
 
         Compound { name: name, arity: arity, args: args }
     }

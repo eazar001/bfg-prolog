@@ -4,6 +4,8 @@ pub mod ast;
 
 
 use lalrpop_util::lalrpop_mod;
+use crate::ast::*;
+
 
 lalrpop_mod!(pub parser);
 
@@ -42,7 +44,7 @@ fn main() {
     let c = parser::CompoundParser::new();
 
     // compounds
-    let s = c.parse("foo(bar(a, b, c, d, e), b, 1, X, 3.4, baz(c))").unwrap();
+    let s = c.parse("p(Z, h(Z, W), f(W))").unwrap();
 
     println!("{:?}", s);
 }
