@@ -5,9 +5,36 @@ pub mod ast;
 
 use lalrpop_util::lalrpop_mod;
 use crate::ast::*;
+use std::collections::{HashMap};
 
 
 lalrpop_mod!(pub parser);
+
+
+fn allocate_registers(compound: &Compound, x: &mut i32, m: &mut HashMap<Term, i32>) {
+    let term = Term::CompoundTerm(compound.clone());
+
+    if !m.contains_key(&term) {
+        m.insert(term, *x);
+        *x += 1;
+    }
+
+    for t in &compound.args {
+        if !m.contains_key(&t) {
+            m.insert(t.clone(), *x);
+            *x += 1;
+        }
+    }
+
+    for t in &compound.args {
+        match &t {
+            Term::CompoundTerm(ref c) => {
+                allocate_registers(c, x, m)
+            },
+            _ => ()
+        }
+    }
+}
 
 
 fn main() {
@@ -32,9 +59,9 @@ fn main() {
     assert!(number_parser.parse("2").is_ok());
     assert!(number_parser.parse("42").is_ok());
     assert!(number_parser.parse("34345354").is_ok());
-    assert!(number_parser.parse("3.3").is_ok());
-    assert!(number_parser.parse("3.30").is_ok());
-    assert!(number_parser.parse("0.3").is_ok());
+//    assert!(number_parser.parse("3.3").is_ok());
+//    assert!(number_parser.parse("3.30").is_ok());
+//    assert!(number_parser.parse("0.3").is_ok());
     assert!(number_parser.parse("a03").is_err());
     assert!(number_parser.parse("_21").is_err());
     assert!(number_parser.parse("2_12").is_err());
@@ -47,4 +74,9 @@ fn main() {
     let s = c.parse("p(Z, h(Z, W), f(W))").unwrap();
 
     println!("{:?}", s);
+
+    let mut m = HashMap::new();
+
+    allocate_registers(&s, &mut 1, &mut m);
+    println!("{:?}", m);
 }
