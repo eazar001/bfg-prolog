@@ -11,38 +11,38 @@ pub Comma: &'input str = {
 pub Args: Vec<Term> = {
     <var:Var> <c:Comma> <args:Args> => {
         let mut args = args;
-        args.push(Term::VarTerm(var));
+        args.push(Term::Var(var));
         args
     },
     <n:Number> <c:Comma> <args:Args> => {
         let mut args = args;
-        args.push(Term::NumberTerm(n));
+        args.push(Term::Number(n));
         args
     },
     <a:Atom> <c:Comma> <args:Args> => {
         let mut args = args;
-        args.push(Term::AtomTerm(a));
+        args.push(Term::Atom(a));
         args
     },
     <compound:Compound> <c:Comma> <args:Args> => {
         let mut args = args;
-        args.push(Term::CompoundTerm(compound));
+        args.push(Term::Compound(compound));
         args
     },
     <v:Var> ")" => {
-        let mut args = vec![Term::VarTerm(v)];
+        let mut args = vec![Term::Var(v)];
         args
     },
     <n:Number> ")" => {
-        let mut args = vec![Term::NumberTerm(n)];
+        let mut args = vec![Term::Number(n)];
         args
     },
     <a:Atom> ")" => {
-        let mut args = vec![Term::AtomTerm(a)];
+        let mut args = vec![Term::Atom(a)];
         args
     },
     <c:Compound> ")" => {
-        let mut args = vec![Term::CompoundTerm(c)];
+        let mut args = vec![Term::Compound(c)];
         args
     }
 };

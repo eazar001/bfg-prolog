@@ -14,10 +14,10 @@ pub struct Atom(pub String);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Term {
-    VarTerm(Var),
-    NumberTerm(Number),
-    AtomTerm(Atom),
-    CompoundTerm(Compound)
+    Var(Var),
+    Number(Number),
+    Atom(Atom),
+    Compound(Compound)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
