@@ -5,7 +5,7 @@ pub mod ast;
 
 use lalrpop_util::lalrpop_mod;
 use crate::ast::*;
-use std::collections::{HashMap};
+use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 use bfg_prolog::{Functor, Register};
 
@@ -28,6 +28,7 @@ enum QueryTerm {
     Compound(QueryCompound)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Instruction {
     PutStructure(Functor, Register),
     SetVariable(Register),
@@ -94,40 +95,48 @@ fn term_to_query_term(m: &HashMap<Term, usize>, term: &Term) -> QueryTerm {
     }
 }
 
-fn compile_query(compound: &Compound) {
+fn compile_query(compound: &Compound) -> Vec<Instruction> {
     let m = allocate_registers(compound);
+    let mut seen = HashSet::new();
+
     let mut pairs: Vec<_> = m.iter().map(|(term, reg)| (reg, term)).collect();
     pairs.sort();
 
+    let mut instructions = Vec::new();
+
     for (reg, term) in &pairs[1..] {
         if let c@QueryTerm::Compound(_) = term {
-            compile_query_subterm(c, &m)
+            compile_query_subterm(c, &m, &mut seen, &mut instructions);
         }
     }
 
     match pairs[0] {
         (1, QueryTerm::Compound(c)) => {
-            for t in &c.args {
-                println!("top-term: {:?}", m.get(t).unwrap())
-            }
+            instructions.push(Instruction::PutStructure(Functor(c.name.clone(), c.arity), 1));
 
-            println!("root-compound: {:?}", c);
+            for t in &c.args {
+                instructions.push(Instruction::SetValue(*m.get(t).unwrap()));
+            }
         },
         _ => panic!()
     }
 
-
+    instructions
 }
 
-fn compile_query_subterm(term: &QueryTerm, m: &HashMap<QueryTerm, usize>) {
-    if let QueryTerm::Var(v) = term {
-        println!("var: {:?}", v);
-    } else if let QueryTerm::Compound(compound) = term {
-        for t in &compound.args {
-            compile_query_subterm(t, m);
+fn compile_query_subterm(term: &QueryTerm, m: &HashMap<QueryTerm, usize>, s: &mut HashSet<QueryTerm>, i: &mut Vec<Instruction>) {
+    if let t@QueryTerm::Var(_) = term {
+        if s.contains(t) {
+            i.push(Instruction::SetValue(*m.get(t).unwrap()));
+        } else {
+            i.push(Instruction::SetVariable(*m.get(t).unwrap()));
+            s.insert(t.clone());
         }
-
-        println!("compound: {:?}", compound)
+    } else if let QueryTerm::Compound(compound) = term {
+        i.push(Instruction::PutStructure(Functor(compound.name.clone(), compound.arity), *m.get(term).unwrap()));
+        for t in &compound.args {
+            compile_query_subterm(t, m, s, i);
+        }
     }
 }
 
@@ -174,5 +183,5 @@ fn main() {
 //
 //    println!("Final Assignments: {:?}", m);
 
-    compile_query(&s);
+    println!("{:?}", compile_query(&s));
 }
