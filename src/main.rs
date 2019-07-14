@@ -36,7 +36,7 @@ struct QueryNumber(usize);
 
 
 // TODO: make this iterative
-fn allocate_registers(compound: &Compound, x: &mut usize, m: &mut HashMap<Term, usize>) {
+fn assign_registers(compound: &Compound, x: &mut usize, m: &mut HashMap<Term, usize>) {
     let term = Term::Compound(compound.clone());
 
     if !m.contains_key(&term) {
@@ -53,9 +53,18 @@ fn allocate_registers(compound: &Compound, x: &mut usize, m: &mut HashMap<Term, 
 
     for t in &compound.args {
         if let Term::Compound(c) = t {
-            allocate_registers(c, x, m)
+            assign_registers(c, x, m);
         }
     }
+}
+
+fn allocate_registers(compound: &Compound) -> HashMap<QueryTerm, usize> {
+    let mut m = HashMap::new();
+    let mut x = 1;
+
+    assign_registers(compound, &mut x, &mut m);
+
+    term_to_query_map(&m)
 }
 
 fn term_to_query_map(m: &HashMap<Term, usize>) -> HashMap<QueryTerm, usize> {
@@ -138,10 +147,7 @@ fn main() {
 
     println!("{:?}", s);
 
-    let mut m = HashMap::new();
+    let m = allocate_registers(&s);
 
-    allocate_registers(&s, &mut 1, &mut m);
-
-    println!("First pass: {:?}", m);
-    println!("Final Assignments: {:?}", term_to_query_map(&m));
+    println!("Final Assignments: {:?}", m);
 }
