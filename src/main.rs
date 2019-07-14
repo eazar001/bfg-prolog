@@ -7,19 +7,20 @@ use lalrpop_util::lalrpop_mod;
 use crate::ast::*;
 use std::collections::{HashMap};
 use std::hash::Hash;
+use bfg_prolog::{Functor, Register};
 
 
 lalrpop_mod!(pub parser);
 
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 struct QueryCompound {
     name: String,
     arity: usize,
     args: Vec<QueryTerm>
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 enum QueryTerm {
     Atom(usize),
     Number(usize),
@@ -27,12 +28,11 @@ enum QueryTerm {
     Compound(QueryCompound)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct QueryVar(usize);
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct QueryAtom(usize);
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct QueryNumber(usize);
+enum Instruction {
+    PutStructure(Functor, Register),
+    SetVariable(Register),
+    SetValue(Register)
+}
 
 
 // TODO: make this iterative
@@ -94,17 +94,40 @@ fn term_to_query_term(m: &HashMap<Term, usize>, term: &Term) -> QueryTerm {
     }
 }
 
-fn compile_query(compound: &Compound, m: &HashMap<Term, i32>) {
+fn compile_query(compound: &Compound) {
+    let m = allocate_registers(compound);
+    let mut pairs: Vec<_> = m.iter().map(|(term, reg)| (reg, term)).collect();
+    pairs.sort();
+
+    for (reg, term) in &pairs[1..] {
+        if let c@QueryTerm::Compound(_) = term {
+            compile_query_subterm(c, &m)
+        }
+    }
+
+    match pairs[0] {
+        (1, QueryTerm::Compound(c)) => {
+            for t in &c.args {
+                println!("top-term: {:?}", m.get(t).unwrap())
+            }
+
+            println!("root-compound: {:?}", c);
+        },
+        _ => panic!()
+    }
+
 
 }
 
-fn compile_query_subterms(compound: &Compound, m: &HashMap<Term, i32>) {
-    for t in &compound.args {
-        if let Term::Compound(c) = t {
-            compile_query(c, m);
-        } else if let Term::Var(v) = t {
-
+fn compile_query_subterm(term: &QueryTerm, m: &HashMap<QueryTerm, usize>) {
+    if let QueryTerm::Var(v) = term {
+        println!("var: {:?}", v);
+    } else if let QueryTerm::Compound(compound) = term {
+        for t in &compound.args {
+            compile_query_subterm(t, m);
         }
+
+        println!("compound: {:?}", compound)
     }
 }
 
@@ -145,9 +168,11 @@ fn main() {
     // compounds
     let s = c.parse("p(Z, h(Z, W), f(W))").unwrap();
 
-    println!("{:?}", s);
+//    println!("{:?}", s);
 
-    let m = allocate_registers(&s);
+//    let m = allocate_registers(&s);
+//
+//    println!("Final Assignments: {:?}", m);
 
-    println!("Final Assignments: {:?}", m);
+    compile_query(&s);
 }

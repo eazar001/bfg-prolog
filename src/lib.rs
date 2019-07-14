@@ -17,7 +17,7 @@ use log::Level::*;
 // heap address represented as usize that corresponds to the vector containing cell data
 type HeapAddress = usize;
 // x-register address which identifies the register that holds the cell data in the corresponding variable
-type Register = usize;
+pub type Register = usize;
 type FunctorArity = usize;
 type FunctorName = String;
 // the "global stack"
@@ -575,7 +575,7 @@ impl PartialOrd for Store {
                 if other.is_heap() {
                     let a2 = other.address();
 
-                    return Some(a1.cmp(&a2))
+                    return Some(a1.cmp(&&a2))
                 }
             },
             XAddr(_) => return None
