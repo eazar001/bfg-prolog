@@ -58,9 +58,14 @@ fn allocate_registers(compound: &Compound, x: &mut usize, m: &mut HashMap<Term, 
     }
 }
 
-fn flattened_term_to_query_term(compound: &Compound, m: &HashMap<Term, usize>) -> Vec<QueryTerm> {
-    let l: Vec<_> = compound.args.iter().map(|t| term_to_query_term(m, t)).collect();
-    l
+fn term_to_query_map(m: &HashMap<Term, usize>) -> HashMap<QueryTerm, usize> {
+    let mut q = HashMap::new();
+
+    for (term, x) in m.iter() {
+        q.insert(term_to_query_term(m, term), *x);
+    }
+
+    q
 }
 
 fn term_to_query_term(m: &HashMap<Term, usize>, term: &Term) -> QueryTerm {
@@ -136,6 +141,7 @@ fn main() {
     let mut m = HashMap::new();
 
     allocate_registers(&s, &mut 1, &mut m);
+
     println!("First pass: {:?}", m);
-    println!("Final Assignments: {:?}", flattened_term_to_query_term(&s, &m));
+    println!("Final Assignments: {:?}", term_to_query_map(&m));
 }
