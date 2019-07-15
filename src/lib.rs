@@ -149,6 +149,14 @@ impl Machine {
         }
     }
 
+    fn execute(&mut self, instruction: &Instruction) {
+        match instruction {
+            Instruction::PutStructure(f, x) => self.put_structure(f.clone(), *x),
+            Instruction::SetValue(x) => self.set_value(*x),
+            Instruction::SetVariable(x) => self.set_variable(*x)
+        }
+    }
+
     fn push_heap(&mut self, cell: Cell) {
         trace!("\t\tHEAP[{}] <- {}", self.heap.len(), cell);
 
@@ -646,12 +654,17 @@ fn compile_query(compound: &Compound) -> Vec<Instruction> {
     instructions
 }
 
-pub fn query(q: &str) -> Vec<Instruction> {
+pub fn query(q: &str) {
     let e = parser::ExpressionParser::new();
     let query = e.parse(q).unwrap();
 
     if let Term::Compound(ref c) = query {
-        compile_query(c)
+        let mut m = Machine::new();
+        let instructions = compile_query(c);
+
+        for instruction in &instructions {
+            m.execute(instruction);
+        }
     } else {
         panic!("not supported yet")
     }
