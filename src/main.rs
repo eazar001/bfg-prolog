@@ -37,7 +37,7 @@ enum Instruction {
 
 
 // TODO: make this iterative
-fn assign_registers(compound: &Compound, x: &mut usize, m: &mut HashMap<Term, usize>) {
+fn allocate_registers(compound: &Compound, x: &mut usize, m: &mut HashMap<Term, usize>, seen: &mut HashSet<Term>, instructions: &mut Vec<Instruction>) {
     let term = Term::Compound(compound.clone());
 
     if !m.contains_key(&term) {
@@ -54,18 +54,36 @@ fn assign_registers(compound: &Compound, x: &mut usize, m: &mut HashMap<Term, us
 
     for t in &compound.args {
         if let Term::Compound(c) = t {
-            assign_registers(c, x, m);
+            allocate_registers(c, x, m, seen, instructions);
+        }
+    }
+
+    let f = Functor(compound.name.clone(), compound.arity);
+    let t = Term::Compound(compound.clone());
+
+    instructions.push(Instruction::PutStructure(f, *m.get(&t).unwrap()));
+    seen.insert(t);
+
+    for t in &compound.args {
+        if !seen.contains(t) {
+            instructions.push(Instruction::SetVariable(*m.get(t).unwrap()));
+            seen.insert(t.clone());
+        } else {
+            instructions.push(Instruction::SetValue(*m.get(t).unwrap()));
         }
     }
 }
 
-fn allocate_registers(compound: &Compound) -> HashMap<QueryTerm, usize> {
+fn compile_query(compound: &Compound) -> Vec<Instruction> {
     let mut m = HashMap::new();
     let mut x = 1;
+    let mut instructions = Vec::new();
+    let mut seen = HashSet::new();
 
-    assign_registers(compound, &mut x, &mut m);
+    allocate_registers(compound, &mut x, &mut m, &mut seen, &mut instructions);
 
-    term_to_query_map(&m)
+//    term_to_query_map(&m)
+    instructions
 }
 
 fn term_to_query_map(m: &HashMap<Term, usize>) -> HashMap<QueryTerm, usize> {
@@ -91,51 +109,6 @@ fn term_to_query_term(m: &HashMap<Term, usize>, term: &Term) -> QueryTerm {
                 .map(|t| term_to_query_term(m, t)).collect();
 
             QueryTerm::Compound(QueryCompound { name: name.clone(), arity: *arity, args })
-        }
-    }
-}
-
-fn compile_query(compound: &Compound) -> Vec<Instruction> {
-    let m = allocate_registers(compound);
-    let mut seen = HashSet::new();
-
-    let mut pairs: Vec<_> = m.iter().map(|(term, reg)| (reg, term)).collect();
-    pairs.sort();
-
-    let mut instructions = Vec::new();
-
-    for (reg, term) in &pairs[1..] {
-        if let c@QueryTerm::Compound(_) = term {
-            compile_query_subterm(c, &m, &mut seen, &mut instructions);
-        }
-    }
-
-    match pairs[0] {
-        (1, QueryTerm::Compound(c)) => {
-            instructions.push(Instruction::PutStructure(Functor(c.name.clone(), c.arity), 1));
-
-            for t in &c.args {
-                instructions.push(Instruction::SetValue(*m.get(t).unwrap()));
-            }
-        },
-        _ => panic!()
-    }
-
-    instructions
-}
-
-fn compile_query_subterm(term: &QueryTerm, m: &HashMap<QueryTerm, usize>, s: &mut HashSet<QueryTerm>, i: &mut Vec<Instruction>) {
-    if let t@QueryTerm::Var(_) = term {
-        if s.contains(t) {
-            i.push(Instruction::SetValue(*m.get(t).unwrap()));
-        } else {
-            i.push(Instruction::SetVariable(*m.get(t).unwrap()));
-            s.insert(t.clone());
-        }
-    } else if let QueryTerm::Compound(compound) = term {
-        i.push(Instruction::PutStructure(Functor(compound.name.clone(), compound.arity), *m.get(term).unwrap()));
-        for t in &compound.args {
-            compile_query_subterm(t, m, s, i);
         }
     }
 }
