@@ -84,3 +84,9 @@ pub Compound: Compound = {
         Compound { name: name, arity: arity, args: args }
     }
 };
+
+pub Expression: Term = {
+    <Atom> "." => Term::Atom(<>),
+    <Var> "." => Term::Var(<>),
+    <Compound> "." => Term::Compound(<>)
+}

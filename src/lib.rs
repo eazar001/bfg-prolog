@@ -635,7 +635,7 @@ fn allocate_registers(compound: &Compound, x: &mut usize, m: &mut HashMap<Term, 
     }
 }
 
-pub fn compile_query(compound: &Compound) -> Vec<Instruction> {
+fn compile_query(compound: &Compound) -> Vec<Instruction> {
     let mut m = HashMap::new();
     let mut x = 1;
     let mut instructions = Vec::new();
@@ -644,6 +644,17 @@ pub fn compile_query(compound: &Compound) -> Vec<Instruction> {
     allocate_registers(compound, &mut x, &mut m, &mut seen, &mut instructions);
 
     instructions
+}
+
+pub fn query(q: &str) -> Vec<Instruction> {
+    let e = parser::ExpressionParser::new();
+    let query = e.parse(q).unwrap();
+
+    if let Term::Compound(ref c) = query {
+        compile_query(c)
+    } else {
+        panic!("not supported yet")
+    }
 }
 
 #[cfg(test)]
@@ -1034,6 +1045,17 @@ mod tests {
         assert!(c.parse("p(Z, h(Z, W), f(W)").is_err());
         assert!(c.parse("p(Z, h(Z,, f(W)").is_err());
         assert!(c.parse("p(Z, f(h(Z, W)), f(W))").is_ok());
+    }
+
+    #[test]
+    fn test_simple_expressions() {
+        let e = parser::ExpressionParser::new();
+
+        //expressions
+        assert!(e.parse("A.").is_ok());
+        assert!(e.parse("2.").is_err());
+        assert!(e.parse("foo(bar).").is_ok());
+        assert!(e.parse("foo.").is_ok());
     }
 
     #[test]

@@ -1,4 +1,4 @@
-use bfg_prolog::{compile_query, parser};
+use bfg_prolog::{query};
 
 
 fn main() {
