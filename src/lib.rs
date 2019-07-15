@@ -2,16 +2,21 @@
 #![allow(unused)]
 #![allow(clippy::new_without_default)]
 
+pub mod ast;
 
 use self::Cell::*;
 use self::Store::*;
 use self::Mode::{Read, Write};
-use std::collections::HashMap;
+use self::ast::*;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter, Debug};
 use std::cmp::Ordering;
 use env_logger;
 use log::{info, warn, error, debug, trace, Level};
 use log::Level::*;
+use lalrpop_util::lalrpop_mod;
+
+lalrpop_mod!(pub parser);
 
 
 // heap address represented as usize that corresponds to the vector containing cell data
@@ -22,6 +27,13 @@ type FunctorArity = usize;
 type FunctorName = String;
 // the "global stack"
 type Heap = Vec<Cell>;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Instruction {
+    PutStructure(Functor, Register),
+    SetVariable(Register),
+    SetValue(Register)
+}
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Functor(pub FunctorName, pub FunctorArity);
@@ -585,6 +597,55 @@ impl PartialOrd for Store {
     }
 }
 
+// TODO: make this iterative
+fn allocate_registers(compound: &Compound, x: &mut usize, m: &mut HashMap<Term, usize>, seen: &mut HashSet<Term>, instructions: &mut Vec<Instruction>) {
+    let term = Term::Compound(compound.clone());
+
+    if !m.contains_key(&term) {
+        m.insert(term, *x);
+        *x += 1;
+    }
+
+    for t in &compound.args {
+        if !m.contains_key(&t) {
+            m.insert(t.clone(), *x);
+            *x += 1;
+        }
+    }
+
+    for t in &compound.args {
+        if let Term::Compound(ref c) = t {
+            allocate_registers(c, x, m, seen, instructions);
+        }
+    }
+
+    let f = Functor(compound.name.clone(), compound.arity);
+    let t = Term::Compound(compound.clone());
+
+    instructions.push(Instruction::PutStructure(f, *m.get(&t).unwrap()));
+    seen.insert(t);
+
+    for t in &compound.args {
+        if !seen.contains(t) {
+            instructions.push(Instruction::SetVariable(*m.get(t).unwrap()));
+            seen.insert(t.clone());
+        } else {
+            instructions.push(Instruction::SetValue(*m.get(t).unwrap()));
+        }
+    }
+}
+
+pub fn compile_query(compound: &Compound) -> Vec<Instruction> {
+    let mut m = HashMap::new();
+    let mut x = 1;
+    let mut instructions = Vec::new();
+    let mut seen = HashSet::new();
+
+    allocate_registers(compound, &mut x, &mut m, &mut seen, &mut instructions);
+
+    instructions
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -925,6 +986,75 @@ mod tests {
 
         let f2 = Functor::from("foo/2");
         assert_ne!(f1, f2);
+    }
+
+    #[test]
+    fn test_atom_parser() {
+        let atom_parser = parser::AtomParser::new();
+
+        // atoms
+        assert!(atom_parser.parse("22").is_err());
+        assert!(atom_parser.parse("_Abc").is_err());
+        assert!(atom_parser.parse("Abc").is_err());
+        assert!(atom_parser.parse("abc").is_ok());
+        assert!(atom_parser.parse("'Abc'").is_ok());
+        assert!(atom_parser.parse("'Abc").is_err());
+        assert!(atom_parser.parse(".q").is_err());
+        assert!(atom_parser.parse("snake_case").is_ok());
+        assert!(atom_parser.parse("'snake_case'").is_ok());
+        assert!(atom_parser.parse("This_Fails").is_err());
+        assert!(atom_parser.parse("'This_Succeeds'").is_ok());
+    }
+
+    #[test]
+    fn test_number_parser() {
+        let number_parser = parser::NumberParser::new();
+
+        // numbers
+        assert!(number_parser.parse("2").is_ok());
+        assert!(number_parser.parse("42").is_ok());
+        assert!(number_parser.parse("34345354").is_ok());
+//    assert!(number_parser.parse("3.3").is_ok());
+//    assert!(number_parser.parse("3.30").is_ok());
+//    assert!(number_parser.parse("0.3").is_ok());
+        assert!(number_parser.parse("a03").is_err());
+        assert!(number_parser.parse("_21").is_err());
+        assert!(number_parser.parse("2_12").is_err());
+        assert!(number_parser.parse(".3").is_err());
+        assert!(number_parser.parse("2.").is_err());
+    }
+
+    #[test]
+    fn test_compound_parser() {
+        let c = parser::CompoundParser::new();
+
+        // compounds
+        assert!(c.parse("p(Z, h(Z, W), f(W))").is_ok());
+        assert!(c.parse("p (Z, h(Z, W), f(W))").is_err());
+        assert!(c.parse("p(Z, h(Z, W), f(W)").is_err());
+        assert!(c.parse("p(Z, h(Z,, f(W)").is_err());
+        assert!(c.parse("p(Z, f(h(Z, W)), f(W))").is_ok());
+    }
+
+    #[test]
+    fn test_query_compiler() {
+        let c = parser::CompoundParser::new();
+
+        let expected_instructions = vec![
+            Instruction::PutStructure(Functor::from("h/2"), 3),
+            Instruction::SetVariable(2),
+            Instruction::SetVariable(5),
+            Instruction::PutStructure(Functor::from("f/1"), 4),
+            Instruction::SetValue(5),
+            Instruction::PutStructure(Functor::from("p/3"), 1),
+            Instruction::SetValue(2),
+            Instruction::SetValue(3),
+            Instruction::SetValue(4)
+        ];
+
+        let q = c.parse("p(Z, h(Z, W), f(W))").unwrap();
+
+        assert_eq!(compile_query(&q), expected_instructions);
     }
 
     fn register_is(machine: &Machine, register: Register, cell: Cell) {
