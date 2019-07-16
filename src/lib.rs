@@ -86,16 +86,21 @@ pub struct Machine {
 
 impl Debug for Registers {
     fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
-        let mut keys: Vec<&usize> = self.x.keys().collect();
-        keys.sort();
+        match self.x.len() {
+            0 => Ok(write!(f, "{:?}", self.x.len())?),
+            _ => {
+                let mut keys: Vec<&usize> = self.x.keys().collect();
+                keys.sort();
 
-        write!(f, "[")?;
+                write!(f, "[")?;
 
-        for key in &keys[..keys.len()-1] {
-            write!(f, "{}: {:?}, ", key, self.x[key])?;
+                for key in &keys[..keys.len()-1] {
+                    write!(f, "{}: {:?}, ", key, self.x[key])?;
+                }
+
+                Ok(write!(f, "{}: {:?}]", keys.len(), self.x[&keys.len()])?)
+            }
         }
-
-        Ok(write!(f, "{}: {:?}]", keys.len(), self.x[&keys.len()])?)
     }
 }
 
@@ -313,7 +318,7 @@ impl Machine {
                         return address
                     }
                 },
-                Str(addr) => {
+                Str(_) => {
                     trace!("\t\tderef: {:?} -> {:?}", start_address, address);
                     return address
                 },
