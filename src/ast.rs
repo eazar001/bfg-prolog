@@ -37,9 +37,8 @@ impl Display for Term {
             Term::Atom(Atom(a)) => Ok(write!(f, "{}", a)?),
             Term::Compound(Compound { name, arity, args }) => {
                 match args.len() {
-                    0 => Ok(write!(f, "{}", name.clone())?),
+                    0 => Ok(write!(f, "{}", &name)?),
                     _ => {
-                        let name = name.clone();
                         let init = &args[..args.len() - 1];
                         let last = args.last();
                         let mut args = String::new();
@@ -50,7 +49,7 @@ impl Display for Term {
 
                         args.push_str(&format!("{})", last.unwrap()));
 
-                        Ok(write!(f, "{}({}", name, args)?)
+                        Ok(write!(f, "{}({}", &name, args)?)
                     }
                 }
             }

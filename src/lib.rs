@@ -1028,7 +1028,7 @@ mod tests {
 
     #[test]
     fn test_atomic_structure_rendering() {
-         let t = Term::Compound( Compound { name: String::from("bar"), arity: 0, args: Vec::new() });
+        let t = Term::Compound( Compound { name: String::from("bar"), arity: 0, args: Vec::new() });
 
         assert_eq!(t.to_string(), "bar");
     }
