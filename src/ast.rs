@@ -29,6 +29,12 @@ pub struct Compound {
     pub args: Vec<Term>
 }
 
+impl From<Atom> for Compound {
+    fn from(Atom(a): Atom) -> Compound {
+        Compound { name: a.clone(), arity: 0, args: Vec::new() }
+    }
+}
+
 impl Display for Term {
     fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
         match self {

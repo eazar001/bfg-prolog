@@ -651,11 +651,10 @@ fn allocate_registers(compound: &Compound, x: &mut usize, m: &mut TermMap, seen:
     }
 }
 
-// convert any atoms in a compound term's argument list to a structure for query compilation/processing
 fn structurize_compound(compound: &mut Compound) {
     for t in &mut compound.args {
-        if let Term::Atom(Atom(a)) = t {
-            *t = Term::Compound(Compound { name: a.clone(), arity: 0, args: Vec::new() });
+        if let Term::Atom(a) = t {
+            *t = Term::Compound(Compound::from(a.clone()));
         } else if let Term::Compound(ref mut c) = t {
             structurize_compound(c)
         }
@@ -1126,9 +1125,9 @@ mod tests {
             Instruction::SetValue(4)
         ];
 
-        let q = c.parse("p(Z, h(Z, W), f(W))").unwrap();
+        let mut q = c.parse("p(Z, h(Z, W), f(W))").unwrap();
 
-        assert_eq!(compile_query(&q), expected_instructions);
+        assert_eq!(compile_query(&mut q), expected_instructions);
     }
 
     fn register_is(machine: &Machine, register: Register, cell: Cell) {
