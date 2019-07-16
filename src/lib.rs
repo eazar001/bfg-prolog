@@ -42,7 +42,7 @@ pub enum Instruction {
 pub struct Functor(pub FunctorName, pub FunctorArity);
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-enum Cell {
+pub enum Cell {
     Str(HeapAddress),
     Ref(HeapAddress),
     Func(Functor)
@@ -662,17 +662,18 @@ fn compile_query(compound: &Compound) -> Vec<Instruction> {
     instructions
 }
 
-pub fn query(q: &str) {
+pub fn query<'a>(m: &'a mut Machine, q: &str) -> &'a Heap {
     let e = parser::ExpressionParser::new();
     let query = e.parse(q).unwrap();
 
     if let Term::Compound(ref c) = query {
-        let mut m = Machine::new();
         let instructions = compile_query(c);
 
         for instruction in &instructions {
             m.execute(instruction);
         }
+
+        &m.heap
     } else {
         panic!("not supported yet")
     }
@@ -1098,7 +1099,7 @@ mod tests {
     }
 
     #[test]
-    fn test_query_compiler() {
+    fn test_instruction_compilation_exercise_2_1() {
         let c = parser::CompoundParser::new();
 
         let expected_instructions = vec![
