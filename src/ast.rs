@@ -29,8 +29,8 @@ pub struct Compound {
     pub args: Vec<Term>
 }
 
-impl From<Atom> for Compound {
-    fn from(Atom(a): Atom) -> Compound {
+impl From<&Atom> for Compound {
+    fn from(Atom(a): &Atom) -> Compound {
         Compound { name: a.clone(), arity: 0, args: Vec::new() }
     }
 }

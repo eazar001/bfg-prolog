@@ -654,7 +654,7 @@ fn allocate_registers(compound: &Compound, x: &mut usize, m: &mut TermMap, seen:
 fn structurize_compound(compound: &mut Compound) {
     for t in &mut compound.args {
         if let Term::Atom(a) = t {
-            *t = Term::Compound(Compound::from(a.clone()));
+            *t = Term::Compound(Compound::from(&*a));
         } else if let Term::Compound(ref mut c) = t {
             structurize_compound(c)
         }
