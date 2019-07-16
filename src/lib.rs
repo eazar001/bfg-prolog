@@ -27,6 +27,9 @@ type FunctorArity = usize;
 type FunctorName = String;
 // the "global stack"
 type Heap = Vec<Cell>;
+type TermMap = HashMap<Term, Register>;
+type TermSet = HashSet<Term>;
+type Instructions = Vec<Instruction>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Instruction {
@@ -606,7 +609,7 @@ impl PartialOrd for Store {
 }
 
 // TODO: make this iterative
-fn allocate_registers(compound: &Compound, x: &mut usize, m: &mut HashMap<Term, usize>, seen: &mut HashSet<Term>, instructions: &mut Vec<Instruction>) {
+fn allocate_registers(compound: &Compound, x: &mut usize, m: &mut TermMap, seen: &mut TermSet, instructions: &mut Instructions) {
     let term = Term::Compound(compound.clone());
 
     if !m.contains_key(&term) {
@@ -673,6 +676,7 @@ pub fn query(q: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Component;
 
     fn init_test_logger() {
         env_logger::builder()
@@ -1010,6 +1014,23 @@ mod tests {
 
         let f2 = Functor::from("foo/2");
         assert_ne!(f1, f2);
+    }
+
+    #[test]
+    fn test_compound_structure_rendering() {
+        let t = Term::Compound( Compound {
+            name: String::from("foo"),
+            arity: 2,
+            args: vec![Term::Atom(Atom("bar".to_string())), Term::Atom(Atom("baz".to_string()))]});
+
+        assert_eq!(t.to_string(), "foo(bar, baz)");
+    }
+
+    #[test]
+    fn test_atomic_structure_rendering() {
+         let t = Term::Compound( Compound { name: String::from("bar"), arity: 0, args: Vec::new() });
+
+        assert_eq!(t.to_string(), "bar");
     }
 
     #[test]

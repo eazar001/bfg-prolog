@@ -1,3 +1,5 @@
+use std::fmt::{Display, Formatter};
+
 type Arity = usize;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -25,4 +27,33 @@ pub struct Compound {
     pub name: String,
     pub arity: Arity,
     pub args: Vec<Term>
+}
+
+impl Display for Term {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
+        match self {
+            Term::Var(Var(label)) => Ok(write!(f, "{}", label)?),
+            Term::Number(Number::Integer(i)) => Ok(write!(f, "{}", i)?),
+            Term::Atom(Atom(a)) => Ok(write!(f, "{}", a)?),
+            Term::Compound(Compound { name, arity, args }) => {
+                match args.len() {
+                    0 => Ok(write!(f, "{}", name.clone())?),
+                    _ => {
+                        let name = name.clone();
+                        let init = &args[..args.len() - 1];
+                        let last = args.last();
+                        let mut args = String::new();
+
+                        for arg in init {
+                            args.push_str(&format!("{}, ", arg));
+                        }
+
+                        args.push_str(&format!("{})", last.unwrap()));
+
+                        Ok(write!(f, "{}({}", name, args)?)
+                    }
+                }
+            }
+        }
+    }
 }
