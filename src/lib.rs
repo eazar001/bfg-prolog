@@ -651,22 +651,34 @@ fn allocate_registers(compound: &Compound, x: &mut usize, m: &mut TermMap, seen:
     }
 }
 
-fn compile_query(compound: &Compound) -> Vec<Instruction> {
+// convert any atoms in a compound term's argument list to a structure for query compilation/processing
+fn structurize_compound(compound: &mut Compound) {
+    for t in &mut compound.args {
+        if let Term::Atom(Atom(a)) = t {
+            *t = Term::Compound(Compound { name: a.clone(), arity: 0, args: Vec::new() });
+        } else if let Term::Compound(ref mut c) = t {
+            structurize_compound(c)
+        }
+    }
+}
+
+fn compile_query(compound: &mut Compound) -> Vec<Instruction> {
     let mut m = HashMap::new();
     let mut x = 1;
     let mut instructions = Vec::new();
     let mut seen = HashSet::new();
 
-    allocate_registers(compound, &mut x, &mut m, &mut seen, &mut instructions);
+    structurize_compound(compound);
+    allocate_registers(&compound, &mut x, &mut m, &mut seen, &mut instructions);
 
     instructions
 }
 
 pub fn query<'a>(m: &'a mut Machine, q: &str) -> &'a Heap {
     let e = parser::ExpressionParser::new();
-    let query = e.parse(q).unwrap();
+    let mut query = e.parse(q).unwrap();
 
-    if let Term::Compound(ref c) = query {
+    if let Term::Compound(ref mut c) = query {
         let instructions = compile_query(c);
 
         for instruction in &instructions {

@@ -4,6 +4,7 @@
       <w>addr</w>
       <w>deref</w>
       <w>prolog</w>
+      <w>structurize</w>
       <w>subterm</w>
       <w>usize</w>
     </words>
