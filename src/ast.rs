@@ -29,6 +29,74 @@ pub struct Compound {
     pub args: Vec<Term>
 }
 
+pub trait Structuralizable {
+    fn structuralize(&self) -> Option<Compound>;
+    fn name(&self) -> String;
+}
+
+impl Structuralizable for Atom {
+    fn structuralize(&self) -> Option<Compound> {
+        let Atom(a) = self;
+        Some(Compound {name: a.clone(), arity: 0, args: Vec::new() })
+    }
+
+    fn name(&self) -> String {
+        self.0.clone()
+    }
+}
+
+impl Structuralizable for Compound {
+    fn structuralize(&self) -> Option<Compound> {
+        let mut args = Vec::new();
+
+        for t in &self.args {
+            match t {
+                Term::Atom(a) => args.push(Term::Compound(a.structuralize().unwrap())),
+                Term::Compound(ref c) => {
+                    let mut temp_args = Vec::new();
+
+                    for t in c.structuralize().unwrap().args {
+                        temp_args.push(t);
+                    }
+
+                    let compound = Term::Compound(
+                        Compound { name: String::from(&c.name), arity: c.arity, args: temp_args }
+                    );
+
+                    args.push(compound);
+                },
+                _ => args.push(t.clone())
+            }
+        }
+
+        Some(Compound { name: String::from(&self.name), arity: self.arity, args })
+    }
+
+    fn name(&self) -> String {
+        let Compound { name, .. } = self;
+        name.clone()
+    }
+}
+
+impl Structuralizable for Term {
+    fn structuralize(&self) -> Option<Compound> {
+        match self {
+            Term::Atom(a) => Some(a.structuralize().unwrap()),
+            Term::Compound(c) => Some(c.structuralize().unwrap()),
+            t => None
+        }
+    }
+
+    fn name(&self) -> String {
+        match self {
+            Term::Compound(c) => c.name.clone(),
+            Term::Atom(Atom(a)) => a.clone(),
+            Term::Number(Number::Integer(i)) => format!("{}", i),
+            Term::Var(Var(v)) => v.clone()
+        }
+    }
+}
+
 impl From<&Atom> for Compound {
     fn from(Atom(a): &Atom) -> Compound {
         Compound { name: a.clone(), arity: 0, args: Vec::new() }

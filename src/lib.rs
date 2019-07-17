@@ -651,33 +651,14 @@ fn allocate_registers(compound: &Compound, x: &mut usize, m: &mut TermMap, seen:
     }
 }
 
-fn structurize_compound(compound: &mut Compound) {
-    for t in &mut compound.args {
-        if let Term::Atom(a) = t {
-            *t = Term::Compound(Compound::from(&*a));
-        } else if let Term::Compound(ref mut c) = t {
-            structurize_compound(c)
-        }
-    }
-}
-
-fn compile_query(term: &mut Term) -> Vec<Instruction> {
+fn compile_query<T: Structuralizable>(term: &T) -> Vec<Instruction> {
     let mut m = HashMap::new();
     let mut x = 1;
     let mut instructions = Vec::new();
     let mut seen = HashSet::new();
 
-    match term {
-        Term::Compound(compound) => {
-            structurize_compound(compound);
-            allocate_registers(&compound, &mut x, &mut m, &mut seen, &mut instructions);
-        },
-        Term::Atom(ref atom) => {
-            let compound = Compound::from(atom);
-            allocate_registers(&compound, &mut x, &mut m, &mut seen, &mut instructions);
-        },
-        _ => panic!("invalid query")
-    }
+    let compound = term.structuralize().unwrap();
+    allocate_registers(&compound, &mut x, &mut m, &mut seen, &mut instructions);
 
     instructions
 }
