@@ -29,35 +29,9 @@ pub struct Compound {
     pub args: Vec<Term>
 }
 
-pub trait NamedType {
-    fn name(&self) -> &str;
-}
-
-impl NamedType for Atom {
-    fn name(&self) -> &str {
-        &self.0
-    }
-}
-
-impl NamedType for Compound {
-    fn name(&self) -> &str {
-        self.name()
-    }
-}
-
-impl From<Atom> for Compound {
-    fn from(Atom(a): Atom) -> Compound {
+impl From<&Atom> for Compound {
+    fn from(Atom(a): &Atom) -> Compound {
         Compound { name: a.clone(), arity: 0, args: Vec::new() }
-    }
-}
-
-impl<T: NamedType + Clone> From<&T> for Compound where Compound: From<T> {
-    fn from(t: &T) -> Compound
-        where T: From<T> + NamedType
-    {
-        let t = t.clone();
-
-        Compound::from(t)
     }
 }
 
