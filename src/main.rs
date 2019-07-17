@@ -6,4 +6,9 @@ fn main() {
 
     // test call
     println!("{:?}", query(&mut m, "p(f(X), h(Y, f(a)), Y)."));
+
+    m = Machine::new();
+
+    // test call
+    println!("{:?}", query(&mut m, "a."));
 }

@@ -661,14 +661,23 @@ fn structurize_compound(compound: &mut Compound) {
     }
 }
 
-fn compile_query(compound: &mut Compound) -> Vec<Instruction> {
+fn compile_query(term: &mut Term) -> Vec<Instruction> {
     let mut m = HashMap::new();
     let mut x = 1;
     let mut instructions = Vec::new();
     let mut seen = HashSet::new();
 
-    structurize_compound(compound);
-    allocate_registers(&compound, &mut x, &mut m, &mut seen, &mut instructions);
+    match term {
+        Term::Compound(compound) => {
+            structurize_compound(compound);
+            allocate_registers(&compound, &mut x, &mut m, &mut seen, &mut instructions);
+        },
+        Term::Atom(ref atom) => {
+            let compound = Compound::from(atom);
+            allocate_registers(&compound, &mut x, &mut m, &mut seen, &mut instructions);
+        },
+        _ => panic!("invalid query")
+    }
 
     instructions
 }
@@ -677,8 +686,8 @@ pub fn query<'a>(m: &'a mut Machine, q: &str) -> &'a Heap {
     let e = parser::ExpressionParser::new();
     let mut query = e.parse(q).unwrap();
 
-    if let Term::Compound(ref mut c) = query {
-        let instructions = compile_query(c);
+    if let t@Term::Compound(_) | t@Term::Atom(_) = &mut query {
+        let instructions = compile_query(t);
 
         for instruction in &instructions {
             m.execute(instruction);
@@ -1125,7 +1134,7 @@ mod tests {
             Instruction::SetValue(4)
         ];
 
-        let mut q = c.parse("p(Z, h(Z, W), f(W))").unwrap();
+        let mut q = Term::Compound(c.parse("p(Z, h(Z, W), f(W))").unwrap());
 
         assert_eq!(compile_query(&mut q), expected_instructions);
     }

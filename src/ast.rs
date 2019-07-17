@@ -39,17 +39,25 @@ impl NamedType for Atom {
     }
 }
 
+impl NamedType for Compound {
+    fn name(&self) -> &str {
+        self.name()
+    }
+}
+
 impl From<Atom> for Compound {
     fn from(Atom(a): Atom) -> Compound {
         Compound { name: a.clone(), arity: 0, args: Vec::new() }
     }
 }
 
-impl<T: NamedType + Into<Compound>> From<&T> for Compound {
+impl<T: NamedType + Clone> From<&T> for Compound where Compound: From<T> {
     fn from(t: &T) -> Compound
         where T: From<T> + NamedType
     {
-        Compound { name: String::from(t.name()), arity: 0, args: Vec::new() }
+        let t = t.clone();
+
+        Compound::from(t)
     }
 }
 
