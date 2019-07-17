@@ -34,8 +34,11 @@ type Instructions = Vec<Instruction>;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Instruction {
     PutStructure(Functor, Register),
+    GetStructure(Functor, Register),
     SetVariable(Register),
-    SetValue(Register)
+    UnifyVariable(Register),
+    SetValue(Register),
+    UnifyValue(Register)
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -160,8 +163,11 @@ impl Machine {
     fn execute(&mut self, instruction: &Instruction) {
         match instruction {
             Instruction::PutStructure(f, x) => self.put_structure(f.clone(), *x),
+            Instruction::GetStructure(f, x) => self.get_structure(f.clone(), *x),
             Instruction::SetValue(x) => self.set_value(*x),
-            Instruction::SetVariable(x) => self.set_variable(*x)
+            Instruction::UnifyValue(x) => self.unify_value(*x),
+            Instruction::SetVariable(x) => self.set_variable(*x),
+            Instruction::UnifyVariable(x) => self.unify_variable(*x)
         }
     }
 
@@ -622,7 +628,7 @@ impl PartialOrd for Store {
 }
 
 // TODO: make this iterative
-fn allocate_registers(compound: &Compound, x: &mut usize, m: &mut TermMap, seen: &mut TermSet, instructions: &mut Instructions) {
+fn allocate_query_registers(compound: &Compound, x: &mut usize, m: &mut TermMap, seen: &mut TermSet, instructions: &mut Instructions) {
     let term = Term::Compound(compound.clone());
 
     if !m.contains_key(&term) {
@@ -639,7 +645,7 @@ fn allocate_registers(compound: &Compound, x: &mut usize, m: &mut TermMap, seen:
 
     for t in &compound.args {
         if let Term::Compound(ref c) = t {
-            allocate_registers(c, x, m, seen, instructions);
+            allocate_query_registers(c, x, m, seen, instructions);
         }
     }
 
@@ -659,14 +665,64 @@ fn allocate_registers(compound: &Compound, x: &mut usize, m: &mut TermMap, seen:
     }
 }
 
-fn compile_query<T: Structuralize>(term: &T) -> Vec<Instruction> {
+// TODO: make this iterative
+fn allocate_program_registers(compound: &Compound, x: &mut usize, m: &mut TermMap, seen: &mut TermSet, instructions: &mut Instructions) {
+    let term = Term::Compound(compound.clone());
+
+    if !m.contains_key(&term) {
+        m.insert(term, *x);
+        *x += 1;
+    }
+
+    for t in &compound.args {
+        if !m.contains_key(&t) {
+            m.insert(t.clone(), *x);
+            *x += 1;
+        }
+    }
+
+    let f = Functor(compound.name.clone(), compound.arity);
+    let t = Term::Compound(compound.clone());
+
+    instructions.push(Instruction::GetStructure(f, *m.get(&t).unwrap()));
+    seen.insert(t);
+
+    for t in &compound.args {
+        if !seen.contains(t) {
+            instructions.push(Instruction::UnifyVariable(*m.get(t).unwrap()));
+            seen.insert(t.clone());
+        } else {
+            instructions.push(Instruction::UnifyValue(*m.get(t).unwrap()));
+        }
+    }
+
+    for t in &compound.args {
+        if let Term::Compound(ref c) = t {
+            allocate_program_registers(c, x, m, seen, instructions);
+        }
+    }
+}
+
+fn compile_query<T: Structuralize>(term: &T) -> Instructions {
     let mut m = HashMap::new();
     let mut x = 1;
     let mut instructions = Vec::new();
     let mut seen = HashSet::new();
 
     let compound = term.structuralize().unwrap();
-    allocate_registers(&compound, &mut x, &mut m, &mut seen, &mut instructions);
+    allocate_query_registers(&compound, &mut x, &mut m, &mut seen, &mut instructions);
+
+    instructions
+}
+
+fn compile_program<T: Structuralize>(term: &T) -> Instructions {
+    let mut m = HashMap::new();
+    let mut x = 1;
+    let mut instructions = Vec::new();
+    let mut seen = HashSet::new();
+
+    let compound = term.structuralize().unwrap();
+    allocate_program_registers(&compound, &mut x, &mut m, &mut seen, &mut instructions);
 
     instructions
 }
@@ -677,6 +733,23 @@ pub fn query<'a>(m: &'a mut Machine, q: &str) -> &'a Heap {
 
     if let t@Term::Compound(_) | t@Term::Atom(_) = &mut query {
         let instructions = compile_query(t);
+
+        for instruction in &instructions {
+            m.execute(instruction);
+        }
+
+        &m.heap
+    } else {
+        panic!("not supported yet")
+    }
+}
+
+pub fn program<'a>(m: &'a mut Machine, p: &str) -> &'a Heap {
+    let e = parser::ExpressionParser::new();
+    let mut program = e.parse(p).unwrap();
+
+    if let t@Term::Compound(_) | t@Term::Atom(_) = &mut program {
+        let instructions = compile_program(t);
 
         for instruction in &instructions {
             m.execute(instruction);
@@ -1108,7 +1181,7 @@ mod tests {
 
     #[test]
     fn test_instruction_compilation_exercise_2_1() {
-        let c = parser::CompoundParser::new();
+        let e = parser::ExpressionParser::new();
 
         let expected_instructions = vec![
             Instruction::PutStructure(Functor::from("h/2"), 3),
@@ -1122,9 +1195,33 @@ mod tests {
             Instruction::SetValue(4)
         ];
 
-        let mut q = Term::Compound(c.parse("p(Z, h(Z, W), f(W))").unwrap());
+        let mut q = e.parse("p(Z, h(Z, W), f(W)).").unwrap();
 
-        assert_eq!(compile_query(&mut q), expected_instructions);
+        assert_eq!(compile_query(&q), expected_instructions);
+    }
+
+    #[test]
+    fn test_program_instruction_compilation_fig_2_4() {
+        let e = parser::ExpressionParser::new();
+
+        let expected_instructions = vec![
+            Instruction::GetStructure(Functor::from("p/3"), 1),
+            Instruction::UnifyVariable(2),
+            Instruction::UnifyVariable(3),
+            Instruction::UnifyVariable(4),
+            Instruction::GetStructure(Functor::from("f/1"), 2),
+            Instruction::UnifyVariable(5),
+            Instruction::GetStructure(Functor::from("h/2"), 3),
+            Instruction::UnifyValue(4),
+            Instruction::UnifyVariable(6),
+            Instruction::GetStructure(Functor::from("f/1"), 6),
+            Instruction::UnifyVariable(7),
+            Instruction::GetStructure(Functor::from("a/0"), 7)
+        ];
+
+        let mut p = e.parse("p(f(X), h(Y, f(a)), Y).").unwrap();
+
+        assert_eq!(compile_program(&p), expected_instructions);
     }
 
     fn register_is(machine: &Machine, register: Register, cell: Cell) {
