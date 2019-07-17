@@ -165,13 +165,21 @@ impl Machine {
         }
     }
 
+    pub fn get_heap(&self) -> &Heap {
+        &self.heap
+    }
+
     fn push_heap(&mut self, cell: Cell) {
         trace!("\t\tHEAP[{}] <- {}", self.heap.len(), cell);
 
         self.heap.push(cell);
     }
 
-    fn get_x(&self, xi: Register) -> Option<&Cell> {
+    pub fn succeed(&self) -> bool {
+        !self.fail
+    }
+
+    pub fn get_x(&self, xi: Register) -> Option<&Cell> {
         self.registers.x.get(&xi)
     }
 
@@ -441,7 +449,7 @@ impl Machine {
         self.inc_s(1);
     }
 
-    fn unify(&mut self, a1: Store, a2: Store) {
+    pub fn unify(&mut self, a1: Store, a2: Store) {
         trace!("\t\tunify {:?}, {:?}:", a1, a2);
 
         self.push_pdl(a1);
@@ -683,7 +691,6 @@ pub fn query<'a>(m: &'a mut Machine, q: &str) -> &'a Heap {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Component;
 
     fn init_test_logger() {
         env_logger::builder()
