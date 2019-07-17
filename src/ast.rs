@@ -53,14 +53,12 @@ impl Structuralize for Compound {
             match t {
                 Term::Atom(a) => args.push(Term::Compound(a.structuralize().unwrap())),
                 Term::Compound(ref c) => {
-                    let mut temp_args = Vec::new();
-
-                    for t in c.structuralize().unwrap().args {
-                        temp_args.push(t);
-                    }
-
                     let compound = Term::Compound(
-                        Compound { name: String::from(&c.name), arity: c.arity, args: temp_args }
+                        Compound {
+                            name: String::from(&c.name),
+                            arity: c.arity,
+                            args: c.structuralize().unwrap().args
+                        }
                     );
 
                     args.push(compound);
