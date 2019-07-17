@@ -53,15 +53,7 @@ impl Structuralize for Compound {
             match t {
                 Term::Atom(a) => args.push(Term::Compound(a.structuralize().unwrap())),
                 Term::Compound(ref c) => {
-                    let compound = Term::Compound(
-                        Compound {
-                            name: String::from(&c.name),
-                            arity: c.arity,
-                            args: c.structuralize().unwrap().args
-                        }
-                    );
-
-                    args.push(compound);
+                    args.push(Term::Compound(c.structuralize().unwrap()));
                 },
                 _ => args.push(t.clone())
             }
