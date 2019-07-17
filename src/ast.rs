@@ -29,12 +29,12 @@ pub struct Compound {
     pub args: Vec<Term>
 }
 
-pub trait Structuralizable {
+pub trait Structuralize {
     fn structuralize(&self) -> Option<Compound>;
     fn name(&self) -> String;
 }
 
-impl Structuralizable for Atom {
+impl Structuralize for Atom {
     fn structuralize(&self) -> Option<Compound> {
         let Atom(a) = self;
         Some(Compound {name: a.clone(), arity: 0, args: Vec::new() })
@@ -45,7 +45,7 @@ impl Structuralizable for Atom {
     }
 }
 
-impl Structuralizable for Compound {
+impl Structuralize for Compound {
     fn structuralize(&self) -> Option<Compound> {
         let mut args = Vec::new();
 
@@ -78,7 +78,7 @@ impl Structuralizable for Compound {
     }
 }
 
-impl Structuralizable for Term {
+impl Structuralize for Term {
     fn structuralize(&self) -> Option<Compound> {
         match self {
             Term::Atom(a) => Some(a.structuralize().unwrap()),

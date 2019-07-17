@@ -659,7 +659,7 @@ fn allocate_registers(compound: &Compound, x: &mut usize, m: &mut TermMap, seen:
     }
 }
 
-fn compile_query<T: Structuralizable>(term: &T) -> Vec<Instruction> {
+fn compile_query<T: Structuralize>(term: &T) -> Vec<Instruction> {
     let mut m = HashMap::new();
     let mut x = 1;
     let mut instructions = Vec::new();

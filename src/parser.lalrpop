@@ -81,6 +81,8 @@ pub Compound: Compound = {
         let mut args = args;
         args.reverse();
 
+        assert!(arity > 0);
+
         Compound { name: name, arity: arity, args: args }
     }
 };
