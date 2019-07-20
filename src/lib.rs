@@ -15,6 +15,7 @@ use env_logger;
 use log::{info, warn, error, debug, trace, Level};
 use log::Level::*;
 use lalrpop_util::lalrpop_mod;
+use std::hash::Hash;
 
 lalrpop_mod!(pub parser);
 
@@ -28,6 +29,7 @@ type FunctorName = String;
 // the "global stack"
 type Heap = Vec<Cell>;
 type TermMap = HashMap<Term, Register>;
+type RegisterMap = HashMap<Register, Term>;
 type TermSet = HashSet<Term>;
 type Instructions = Vec<Instruction>;
 
@@ -584,7 +586,7 @@ impl Cell {
         false
     }
 
-    fn address(&self) -> Option<HeapAddress> {
+    pub fn address(&self) -> Option<HeapAddress> {
         match self {
             Str(addr) => Some(*addr),
             Ref(addr) => Some(*addr),
@@ -706,7 +708,7 @@ fn compile_query<T: Structuralize>(term: &T) -> Instructions {
     instructions
 }
 
-fn compile_program<T: Structuralize>(term: &T) -> Instructions {
+fn compile_program<T: Structuralize>(term: &T) -> (Instructions, RegisterMap) {
     let mut m = HashMap::new();
     let mut x = 1;
     let mut instructions = Vec::new();
@@ -715,7 +717,14 @@ fn compile_program<T: Structuralize>(term: &T) -> Instructions {
     let compound = term.structuralize().unwrap();
     allocate_program_registers(&compound, &mut x, &mut m, &mut seen, &mut instructions);
 
-    instructions
+    let r_vec: Vec<(_,_)> = m.iter().map(|(k,v)| (v, k)).collect();
+    let mut r_map = HashMap::new();
+
+    for (k, v) in r_vec {
+        r_map.insert(*k, v.clone());
+    }
+
+    (instructions, r_map)
 }
 
 pub fn query<'a>(m: &'a mut Machine, q: &str) -> &'a Heap {
@@ -735,20 +744,58 @@ pub fn query<'a>(m: &'a mut Machine, q: &str) -> &'a Heap {
     }
 }
 
-pub fn program<'a>(m: &'a mut Machine, p: &str) -> &'a Heap {
+pub fn program<'a>(m: &'a mut Machine, p: &str) -> RegisterMap {
     let e = parser::ExpressionParser::new();
     let mut program = e.parse(p).unwrap();
 
     if let t@Term::Compound(_) | t@Term::Atom(_) = &mut program {
-        let instructions = compile_program(t);
+        let (instructions, r_map) = compile_program(t);
 
         for instruction in &instructions {
             m.execute(instruction);
         }
 
-        &m.heap
+        r_map
     } else {
         panic!("not supported yet")
+    }
+}
+
+pub fn resolve_term(m: &Machine, addr: HeapAddress, term_string: &mut String) {
+    let d = m.deref(Store::HeapAddr(addr));
+    let cell = m.get_store_cell(d);
+
+
+    match cell {
+        Cell::Func(Functor(name, arity)) => {
+            if *arity == 0 {
+                term_string.push_str(name);
+            } else {
+                term_string.push_str(&format!("{}(", name));
+            }
+
+            for i in 1..=*arity {
+                resolve_term(&m, d.address() + i, term_string);
+
+                if i != *arity {
+                    term_string.push_str(", ");
+                }
+            }
+
+            if *arity > 0 {
+                term_string.push_str(")");
+            }
+        },
+        Cell::Str(a) => {
+            resolve_term(&m, *a, term_string)
+        },
+        Cell::Ref(r) => {
+            if *r == d.address() {
+                term_string.push_str(&Cell::Ref(*r).to_string());
+            } else {
+                resolve_term(&m, *r, term_string);
+            }
+        }
     }
 }
 
