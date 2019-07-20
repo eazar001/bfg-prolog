@@ -1258,8 +1258,9 @@ mod tests {
         ];
 
         let mut p = e.parse("p(f(X), h(Y, f(a)), Y).").unwrap();
+        let (instructions, _) = compile_program(&p);
 
-        assert_eq!(compile_program(&p), expected_instructions);
+        assert_eq!(instructions, expected_instructions);
     }
 
     fn register_is(machine: &Machine, register: Register, cell: Cell) {
