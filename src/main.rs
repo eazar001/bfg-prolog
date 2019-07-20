@@ -13,5 +13,5 @@ fn main() {
     println!("{:?}", query(&mut m, "p(f(X), h(Y, f(a)), Y)."));
 
     //test call
-    println!("{:?}", program(&mut m, "p(f(X), h(Y, f(a)), Y)."))
+    println!("{:?}", program(&mut m, "p(Z, h(Z, W), f(W))."))
 }

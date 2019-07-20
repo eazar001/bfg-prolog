@@ -175,14 +175,22 @@ impl Machine {
         &self.heap
     }
 
+    pub fn get_x_registers(&self) -> &HashMap<Register, Cell> {
+        &self.registers.x
+    }
+
     fn push_heap(&mut self, cell: Cell) {
         trace!("\t\tHEAP[{}] <- {}", self.heap.len(), cell);
 
         self.heap.push(cell);
     }
 
-    pub fn succeed(&self) -> bool {
+    pub fn is_true(&self) -> bool {
         !self.fail
+    }
+
+    pub fn is_false(&self) -> bool {
+        self.fail
     }
 
     pub fn get_x(&self, xi: Register) -> Option<&Cell> {
@@ -607,23 +615,6 @@ impl Store {
             HeapAddr(addr) => *addr,
             XAddr(addr) => *addr
         }
-    }
-}
-
-impl PartialOrd for Store {
-    fn partial_cmp(&self, other: &Store) -> Option<Ordering> {
-        match self {
-            HeapAddr(a1) => {
-                if other.is_heap() {
-                    let a2 = other.address();
-
-                    return Some(a1.cmp(&&a2))
-                }
-            },
-            XAddr(_) => return None
-        }
-
-        None
     }
 }
 

@@ -31,7 +31,7 @@ fn test_query_execution_2_2() {
     let mut m = Machine::new();
 
     query(&mut m, "f(X, g(X, a)).");
-    let heap_output = query(&mut m, "f(b, Y).").clone();
+    query(&mut m, "f(b, Y).");
 
     let expected_heap_cells = vec![
         Str(1),
@@ -52,17 +52,16 @@ fn test_query_execution_2_2() {
         Ref(15)
     ];
 
-    assert_eq!(&heap_output, &expected_heap_cells);
+    assert_eq!(m.get_heap(), &expected_heap_cells);
 
-    let m_clone = m.clone();
-    register_is(&m_clone, 1, Str(13));
-    register_is(&m_clone, 2, Str(11));
-    register_is(&m_clone, 3, Ref(15));
-    register_is(&m_clone, 4, Str(1));
+    register_is(&m, 1, Str(13));
+    register_is(&m, 2, Str(11));
+    register_is(&m, 3, Ref(15));
+    register_is(&m, 4, Str(1));
 
     m.unify(HeapAddr(6), HeapAddr(12));
 
-    assert!(m.succeed());
+    assert!(m.is_true());
 
     let expected_heap_cells = vec![
         Str(1),
