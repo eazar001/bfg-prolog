@@ -744,7 +744,7 @@ pub fn query<'a>(m: &'a mut Machine, q: &str) -> &'a Heap {
     }
 }
 
-pub fn program<'a>(m: &'a mut Machine, p: &str) -> RegisterMap {
+pub fn program(m: &mut Machine, p: &str) -> RegisterMap {
     let e = parser::ExpressionParser::new();
     let mut program = e.parse(p).unwrap();
 
@@ -795,6 +795,47 @@ pub fn resolve_term(m: &Machine, addr: HeapAddress, term_string: &mut String) {
             } else {
                 resolve_term(&m, *r, term_string);
             }
+        }
+    }
+}
+
+pub fn link_term_args(term_1: &Term, term_2: &Term) {
+    if term_1 == term_2 {
+        println!("{} = {}", term_1, term_2);
+
+        return
+    } else if let Term::Var(_) = term_1 {
+        println!("{} = {}", term_1, term_2);
+
+        return
+    } else if let Term::Var(_) = term_2 {
+        println!("{} = {}", term_2, term_1);
+
+        return
+    }
+}
+
+pub fn link_terms(term_1: &Term, term_2: &Term) {
+    if term_1 == term_2 {
+        println!("{} = {}", term_1, term_2);
+        return
+    }
+
+    match (term_1, term_2) {
+        (Term::Compound(c1), Term::Compound(c2)) => {
+            link_term_args(term_1, term_2);
+
+            let (mut c1_args, mut c2_args) = (c1.args.clone(), c2.args.clone());
+
+            while !(c1_args.is_empty() || c2_args.is_empty()) {
+                let c1_arg = c1_args.pop().unwrap();
+                let c2_arg = c2_args.pop().unwrap();
+
+                link_terms(&c1_arg, &c2_arg);
+            }
+        }
+        _ => {
+            link_term_args(term_1, term_2);
         }
     }
 }
