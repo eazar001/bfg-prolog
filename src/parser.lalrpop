@@ -29,19 +29,19 @@ pub Args: Vec<Term> = {
         args
     },
     <v:Var> ")" => {
-        let mut args = vec![Term::Var(v)];
+        let args = vec![Term::Var(v)];
         args
     },
     <n:Number> ")" => {
-        let mut args = vec![Term::Number(n)];
+        let args = vec![Term::Number(n)];
         args
     },
     <a:Atom> ")" => {
-        let mut args = vec![Term::Atom(a)];
+        let args = vec![Term::Atom(a)];
         args
     },
     <c:Compound> ")" => {
-        let mut args = vec![Term::Compound(c)];
+        let args = vec![Term::Compound(c)];
         args
     }
 };

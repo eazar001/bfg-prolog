@@ -6,7 +6,9 @@ use bfg_prolog::Cell::{Str, Ref};
 #[test]
 fn test_query_execution_exercise_2_1() {
     let mut m = Machine::new();
-    let heap_output = query(&mut m, "p(Z, h(Z, W), f(W)).");
+    query(&mut m, "p(Z, h(Z, W), f(W)).");
+
+    let heap_output = m.get_heap();
 
     let expected_heap_cells = vec![
         Str(1),

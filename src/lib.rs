@@ -43,10 +43,10 @@ pub enum Instruction {
     UnifyValue(Register)
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Functor(pub FunctorName, pub FunctorArity);
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Cell {
     Str(HeapAddress),
     Ref(HeapAddress),
@@ -696,7 +696,7 @@ fn allocate_program_registers(compound: &Compound, x: &mut usize, m: &mut TermMa
     }
 }
 
-fn compile_query<T: Structuralize>(term: &T) -> Instructions {
+fn compile_query<T: Structuralize>(term: &T) -> (Instructions, TermMap) {
     let mut m = HashMap::new();
     let mut x = 1;
     let mut instructions = Vec::new();
@@ -705,10 +705,10 @@ fn compile_query<T: Structuralize>(term: &T) -> Instructions {
     let compound = term.structuralize().unwrap();
     allocate_query_registers(&compound, &mut x, &mut m, &mut seen, &mut instructions);
 
-    instructions
+    (instructions, m)
 }
 
-fn compile_program<T: Structuralize>(term: &T) -> (Instructions, RegisterMap) {
+fn compile_program<T: Structuralize>(term: &T) -> (Instructions, TermMap) {
     let mut m = HashMap::new();
     let mut x = 1;
     let mut instructions = Vec::new();
@@ -717,51 +717,54 @@ fn compile_program<T: Structuralize>(term: &T) -> (Instructions, RegisterMap) {
     let compound = term.structuralize().unwrap();
     allocate_program_registers(&compound, &mut x, &mut m, &mut seen, &mut instructions);
 
-    let r_vec: Vec<(_,_)> = m.iter().map(|(k,v)| (v, k)).collect();
-    let mut r_map = HashMap::new();
-
-    for (k, v) in r_vec {
-        r_map.insert(*k, v.clone());
-    }
-
-    (instructions, r_map)
+    (instructions, m)
 }
 
-pub fn query<'a>(m: &'a mut Machine, q: &str) -> &'a Heap {
+pub fn query(m: &mut Machine, q: &str) -> HashMap<Cell, Term> {
     let e = parser::ExpressionParser::new();
     let mut query = e.parse(q).unwrap();
 
     if let t@Term::Compound(_) | t@Term::Atom(_) = &mut query {
-        let instructions = compile_query(t);
+        let (instructions, term_map) = compile_query(t);
+        let mut output = HashMap::new();
 
         for instruction in &instructions {
             m.execute(instruction);
         }
 
-        &m.heap
+        for (term, x) in &term_map {
+            output.insert(m.get_x(*x).unwrap().clone(), term.clone());
+        }
+
+        output
     } else {
         panic!("not supported yet")
     }
 }
 
-pub fn program(m: &mut Machine, p: &str) -> RegisterMap {
+pub fn program(m: &mut Machine, p: &str) -> HashMap<Cell, Term>{
     let e = parser::ExpressionParser::new();
     let mut program = e.parse(p).unwrap();
 
     if let t@Term::Compound(_) | t@Term::Atom(_) = &mut program {
-        let (instructions, r_map) = compile_program(t);
+        let (instructions, term_map) = compile_program(t);
+        let mut output = HashMap::new();
 
         for instruction in &instructions {
             m.execute(instruction);
         }
 
-        r_map
+        for (term, x) in &term_map {
+            output.insert(m.get_x(*x).unwrap().clone(), term.clone());
+        }
+
+        output
     } else {
         panic!("not supported yet")
     }
 }
 
-pub fn resolve_term(m: &Machine, addr: HeapAddress, term_string: &mut String) {
+pub fn resolve_term(m: &Machine, addr: HeapAddress, display_map: &[(Cell, Term)], term_string: &mut String) {
     let d = m.deref(Store::HeapAddr(addr));
     let cell = m.get_store_cell(d);
 
@@ -775,7 +778,7 @@ pub fn resolve_term(m: &Machine, addr: HeapAddress, term_string: &mut String) {
             }
 
             for i in 1..=*arity {
-                resolve_term(&m, d.address() + i, term_string);
+                resolve_term(&m, d.address() + i, display_map, term_string);
 
                 if i != *arity {
                     term_string.push_str(", ");
@@ -787,58 +790,29 @@ pub fn resolve_term(m: &Machine, addr: HeapAddress, term_string: &mut String) {
             }
         },
         Cell::Str(a) => {
-            resolve_term(&m, *a, term_string)
+            resolve_term(&m, *a, display_map, term_string)
         },
         Cell::Ref(r) => {
             if *r == d.address() {
-                term_string.push_str(&Cell::Ref(*r).to_string());
+                for (cell, term) in display_map {
+                    if let Ref(a) = cell {
+                        if *a == *r {
+                            if let Term::Var(_) = term {
+                                let s = format!("{}", term);
+
+                                term_string.push_str(&s);
+                                break;
+                            }
+                        }
+                    }
+                }
             } else {
-                resolve_term(&m, *r, term_string);
+                resolve_term(&m, *r, display_map, term_string);
             }
         }
     }
 }
 
-pub fn link_term_args(term_1: &Term, term_2: &Term) {
-    if term_1 == term_2 {
-        println!("{} = {}", term_1, term_2);
-
-        return
-    } else if let Term::Var(_) = term_1 {
-        println!("{} = {}", term_1, term_2);
-
-        return
-    } else if let Term::Var(_) = term_2 {
-        println!("{} = {}", term_2, term_1);
-
-        return
-    }
-}
-
-pub fn link_terms(term_1: &Term, term_2: &Term) {
-    if term_1 == term_2 {
-        println!("{} = {}", term_1, term_2);
-        return
-    }
-
-    match (term_1, term_2) {
-        (Term::Compound(c1), Term::Compound(c2)) => {
-            link_term_args(term_1, term_2);
-
-            let (mut c1_args, mut c2_args) = (c1.args.clone(), c2.args.clone());
-
-            while !(c1_args.is_empty() || c2_args.is_empty()) {
-                let c1_arg = c1_args.pop().unwrap();
-                let c2_arg = c2_args.pop().unwrap();
-
-                link_terms(&c1_arg, &c2_arg);
-            }
-        }
-        _ => {
-            link_term_args(term_1, term_2);
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -1275,8 +1249,9 @@ mod tests {
         ];
 
         let mut q = e.parse("p(Z, h(Z, W), f(W)).").unwrap();
+        let (instructions, _) = compile_query(&q);
 
-        assert_eq!(compile_query(&q), expected_instructions);
+        assert_eq!(instructions, expected_instructions);
     }
 
     #[test]

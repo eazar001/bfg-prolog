@@ -1,4 +1,4 @@
-use bfg_prolog::{Machine, query, program, resolve_term, ast, link_terms};
+use bfg_prolog::{Machine, query, program, resolve_term, ast, Cell};
 use lalrpop_util::lalrpop_mod;
 
 lalrpop_mod!(pub parser);
@@ -6,41 +6,31 @@ lalrpop_mod!(pub parser);
 
 fn main() {
     let mut m = Machine::new();
-    let p = parser::ExpressionParser::new();
 
-    // test call
-    println!("{:?}", query(&mut m, "a."));
+    let query_map = query(&mut m, "p(f(X), h(Y, f(a)), Y).");
+    let program_map = program(&mut m, "p(Z, h(Z, W), f(W)).");
 
-    m = Machine::new();
+    let mut display_map = Vec::new();
 
-    // test call
-    println!("{:?}", query(&mut m, "p(f(X), h(Y, f(a)), Y)."));
+    display_map.extend(query_map);
+    display_map.extend(program_map);
 
-    //test call
-    let r_map = program(&mut m, "p(Z, h(Z, W), f(W)).");
+    println!("{:?}\n\n", display_map);
 
-    assert!(m.is_true());
 
-    for (x, cell) in m.get_x_registers() {
-        let mut s = String::new();
+    for (cell, term) in &display_map {
+        match cell {
+            Cell::Ref(a) | Cell::Str(a) => {
+                if let ast::Term::Var(_) = term {
+                    let mut buffer = String::new();
+                    resolve_term(&m, *a, &display_map, &mut buffer);
 
-        resolve_term(&m, cell.address().unwrap(), &mut s);
-        s.push_str(".");
-
-        let result = r_map.get(x);
-
-        if result.is_some() {
-            let r = result.unwrap();
-
-            if let ast::Term::Var(_) = r {
-                let parse = p.parse(&s);
-
-                if parse.is_ok() {
-                    println!("{} = {}", r, p.parse(&s).unwrap())
+                    if buffer != term.to_string() {
+                        println!("{} = {}", term, buffer);
+                    }
                 }
-            }
+            },
+            _ => ()
         }
     }
-
-    link_terms(&p.parse("p(f(X), h(Y, f(a)), Y).").unwrap(), &p.parse("p(Z, h(Z, W), f(W)).").unwrap());
 }
