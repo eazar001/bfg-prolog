@@ -1161,6 +1161,34 @@ mod tests {
     }
 
     #[test]
+    fn test_query_execution_2_6() {
+        let mut m = Machine::new();
+
+
+        m.put_variable(4, 1);
+        m.put_structure(Functor::from("h/2"), 2);
+        m.set_value(4);
+        m.set_variable(5);
+        m.put_structure(Functor::from("f/1"), 3);
+        m.set_value(5);
+        m.call(Functor::from("p/3"));
+
+        let expected_heap_cells = vec![
+            Ref(0),
+            Str(2),
+            Cell::from("h/2"),
+            Ref(0),
+            Ref(4),
+            Str(6),
+            Cell::from("f/1"),
+            Ref(4)
+        ];
+
+        let heap_cells = m.get_heap();
+        assert_eq!(heap_cells, &expected_heap_cells);
+    }
+
+    #[test]
     fn test_exercise_2_7() {
         let mut m = Machine::new();
 
@@ -1214,6 +1242,37 @@ mod tests {
         register_is(&m, 5, Ref(0));
         register_is(&m, 6, Ref(4));
         register_is(&m, 7, Ref(13));
+    }
+
+    #[ignore]
+    #[test]
+    fn test_instruction_compilation_exercise_2_8() {
+        // TODO: fix this test once M1 is complete
+        let q = Compound {
+            name: "p".to_string(),
+            arity: 3,
+            args: vec![
+                Term::Compound(Compound { name: "f".to_string(), arity: 1, args: vec![Term::Var(Var("X".to_string()))] }),
+                Term::Compound(
+                    Compound {
+                        name: "h".to_string(),
+                        arity: 2,
+                        args: vec![
+                            Term::Var(Var("Y".to_string())),
+                            Term::Compound(Compound {
+                                name: "f".to_string(),
+                                arity: 1,
+                                args: vec![Term::Atom(Atom("a".to_string()))]})
+                        ]
+                    }
+                ),
+                Term::Var(Var("Y".to_string()))
+            ]
+        };
+
+        let (query_instructions, _) = compile_query(&q);
+
+        println!("{:?}", query_instructions);
     }
 
     #[test]
