@@ -32,6 +32,8 @@ type TermMap = HashMap<Term, Register>;
 type RegisterMap = HashMap<Register, Term>;
 type TermSet = HashSet<Term>;
 type Instructions = Vec<Instruction>;
+type QueryBindings = Vec<String>;
+type ProgramBindings = Vec<String>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Instruction {
@@ -43,10 +45,10 @@ pub enum Instruction {
     UnifyValue(Register)
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct Functor(pub FunctorName, pub FunctorArity);
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub enum Cell {
     Str(HeapAddress),
     Ref(HeapAddress),
@@ -742,7 +744,63 @@ pub fn query(m: &mut Machine, q: &str) -> HashMap<Cell, Term> {
     }
 }
 
-pub fn program(m: &mut Machine, p: &str) -> HashMap<Cell, Term>{
+// execute a query against the program term and display the results of the bindings (if any)
+pub fn run_query(m: &mut Machine, q: &str, p: &str) -> (QueryBindings, ProgramBindings) {
+    let query_map = query(m, q);
+    let program_map = program(m, p);
+
+    let mut display_vec = Vec::new();
+    let mut query_bindings = Vec::new();
+    let mut program_bindings = Vec::new();
+
+    display_vec.extend(query_map);
+
+    for (cell, term) in &display_vec {
+        match cell {
+            Cell::Ref(a) | Cell::Str(a) => {
+                if let ast::Term::Var(_) = term {
+                    let mut buffer = String::new();
+                    resolve_term(&m, *a, &display_vec, &mut buffer);
+
+                    if buffer != term.to_string() {
+                        query_bindings.push(format!("{} = {}", term, buffer));
+                    }
+                }
+            },
+            _ => ()
+        }
+    }
+
+    display_vec.extend(program_map);
+
+    for (cell, term) in &display_vec {
+        match cell {
+            Cell::Ref(a) | Cell::Str(a) => {
+                if let ast::Term::Var(_) = term {
+                    let mut buffer = String::new();
+                    resolve_term(&m, *a, &display_vec, &mut buffer);
+
+                    if buffer != term.to_string() {
+                        let program_binding = format!("{} = {}", term, buffer);
+
+                        if !query_bindings.contains(&program_binding) {
+                            program_bindings.push(format!("{} = {}", term, buffer));
+                        }
+
+                    }
+                }
+            },
+            _ => ()
+        }
+    }
+
+    query_bindings.sort();
+    program_bindings.sort();
+
+    (query_bindings, program_bindings)
+}
+
+pub fn program(m: &mut Machine, p: &str) -> HashMap<Cell, Term> {
     let e = parser::ExpressionParser::new();
     let mut program = e.parse(p).unwrap();
 
@@ -828,7 +886,6 @@ mod tests {
 
     #[test]
     fn test_set_variable() {
-//        init_test_logger();
         let mut m = Machine::new();
 
         m.set_variable(0);
@@ -842,7 +899,6 @@ mod tests {
 
     #[test]
     fn test_set_value() {
-//        init_test_logger();
         let mut m = Machine::new();
 
         m.set_variable(0);
@@ -862,7 +918,6 @@ mod tests {
 
     #[test]
     fn test_put_structure() {
-//        init_test_logger();
         let mut m = Machine::new();
 
         m.put_structure(Functor(String::from("foo"), 2), 0);
@@ -889,7 +944,6 @@ mod tests {
 
     #[test]
     fn test_deref() {
-//        init_test_logger();
         let mut m = Machine::new();
 
         m.heap = vec![
@@ -916,28 +970,16 @@ mod tests {
 
     #[test]
     fn test_exercise_2_1() {
-//        init_test_logger();
-
-        // L0 program: p(Z, h(Z, W), f(W)).
         let mut m = Machine::new();
 
-        // put_structure h/2, x3
         m.put_structure(Functor::from("h/2"), 3);
-        // set_variable, x2
         m.set_variable(2);
-        // set_variable, x5
         m.set_variable(5);
-        // put_structure f/1, x4
         m.put_structure(Functor::from("f/1"), 4);
-        // set_value, x5
         m.set_value(5);
-        // put_structure p/3, x1
         m.put_structure(Functor::from("p/3"), 1);
-        // set_value x2
         m.set_value(2);
-        // set_value x3
         m.set_value(3);
-        // set_value x4
         m.set_value(4);
 
 
@@ -968,53 +1010,29 @@ mod tests {
 
     #[test]
     fn test_exercise_2_3() {
-//        init_test_logger();
-
-        // p(Z, h(Z, W), f(W)) = p(f(X), h(Y, f(a)), Y).
         let mut m = Machine::new();
 
-        // put_structure h/2, x3
         m.put_structure(Functor::from("h/2"), 3);
-        // set_variable, x2
         m.set_variable(2);
-        // set_variable, x5
         m.set_variable(5);
-        // put_structure f/1, x4
         m.put_structure(Functor::from("f/1"), 4);
-        // set_value, x5
         m.set_value(5);
-        // put_structure p/3, x1
         m.put_structure(Functor::from("p/3"), 1);
-        // set_value x2
         m.set_value(2);
-        // set_value x3
         m.set_value(3);
-        // set_value x4
         m.set_value(4);
 
-        // get_structure p/3, x1
         m.get_structure(Functor::from("p/3"), 1);
-        // unify_variable x2
         m.unify_variable(2);
-        // unify_variable x3
         m.unify_variable(3);
-        // unify_variable x4
         m.unify_variable(4);
-        // get_structure f/1, x2
         m.get_structure(Functor::from("f/1"), 2);
-        // unify_variable x5
         m.unify_variable(5);
-        // get_structure h/2, x3
         m.get_structure(Functor::from("h/2"), 3);
-        // unify_value x4
         m.unify_value(4);
-        // unify_variable x6
         m.unify_variable(6);
-        // get_structure f/1, x6
         m.get_structure(Functor::from("f/1"), 6);
-        // unify_variable x7
         m.unify_variable(7);
-        // get_structure a/0, x7
         m.get_structure(Functor::from("a/0"), 7);
 
         let expected_heap_cells = vec![
@@ -1055,10 +1073,95 @@ mod tests {
     }
 
     #[test]
-    fn test_exercise_2_7() {
-//        init_test_logger();
+    fn test_program_instruction_compilation_fig_2_3() {
+        let e = parser::ExpressionParser::new();
 
-        // p(Z, h(Z, W), f(W)) = p(f(X), h(Y, f(a)), Y).
+        let expected_instructions = vec![
+            Instruction::PutStructure(Functor::from("h/2"), 3),
+            Instruction::SetVariable(2),
+            Instruction::SetVariable(5),
+            Instruction::PutStructure(Functor::from("f/1"), 4),
+            Instruction::SetValue(5),
+            Instruction::PutStructure(Functor::from("p/3"), 1),
+            Instruction::SetValue(2),
+            Instruction::SetValue(3),
+            Instruction::SetValue(4)
+        ];
+
+        let mut p = e.parse("p(Z, h(Z, W), f(W)).").unwrap();
+        let (instructions, _) = compile_query(&p);
+
+        assert_eq!(instructions, expected_instructions);
+    }
+
+    #[test]
+    fn test_program_instruction_compilation_fig_2_4() {
+        let e = parser::ExpressionParser::new();
+
+        let expected_instructions = vec![
+            Instruction::GetStructure(Functor::from("p/3"), 1),
+            Instruction::UnifyVariable(2),
+            Instruction::UnifyVariable(3),
+            Instruction::UnifyVariable(4),
+            Instruction::GetStructure(Functor::from("f/1"), 2),
+            Instruction::UnifyVariable(5),
+            Instruction::GetStructure(Functor::from("h/2"), 3),
+            Instruction::UnifyValue(4),
+            Instruction::UnifyVariable(6),
+            Instruction::GetStructure(Functor::from("f/1"), 6),
+            Instruction::UnifyVariable(7),
+            Instruction::GetStructure(Functor::from("a/0"), 7)
+        ];
+
+        let mut p = e.parse("p(f(X), h(Y, f(a)), Y).").unwrap();
+        let (instructions, _) = compile_program(&p);
+
+        assert_eq!(instructions, expected_instructions);
+    }
+
+    #[test]
+    fn test_instruction_compilation_exercise_2_4() {
+        let e = parser::ExpressionParser::new();
+
+        let expected_query_instructions = vec![
+            Instruction::PutStructure(Functor::from("f/1"), 2),
+            Instruction::SetVariable(5),
+            Instruction::PutStructure(Functor::from("a/0"), 7),
+            Instruction::PutStructure(Functor::from("f/1"), 6),
+            Instruction::SetValue(7),
+            Instruction::PutStructure(Functor::from("h/2"), 3),
+            Instruction::SetVariable(4),
+            Instruction::SetValue(6),
+            Instruction::PutStructure(Functor::from("p/3"), 1),
+            Instruction::SetValue(2),
+            Instruction::SetValue(3),
+            Instruction::SetValue(4)
+        ];
+
+        let expected_program_instructions = vec![
+            Instruction::GetStructure(Functor::from("p/3"), 1),
+            Instruction::UnifyVariable(2),
+            Instruction::UnifyVariable(3),
+            Instruction::UnifyVariable(4),
+            Instruction::GetStructure(Functor::from("h/2"), 3),
+            Instruction::UnifyValue(2),
+            Instruction::UnifyVariable(5),
+            Instruction::GetStructure(Functor::from("f/1"), 4),
+            Instruction::UnifyValue(5)
+        ];
+
+        let mut q = e.parse("p(f(X), h(Y, f(a)), Y).").unwrap();
+        let mut p = e.parse("p(Z, h(Z, W), f(W)).").unwrap();
+
+        let (query_instructions, _) = compile_query(&q);
+        let (program_instructions, _) = compile_program(&p);
+
+        assert_eq!(query_instructions, expected_query_instructions);
+        assert_eq!(program_instructions, expected_program_instructions);
+    }
+
+    #[test]
+    fn test_exercise_2_7() {
         let mut m = Machine::new();
 
         m.put_variable(4, 1);
@@ -1115,8 +1218,6 @@ mod tests {
 
     #[test]
     fn test_unify_variable_read_mode() {
-//        init_test_logger();
-
         let mut m = Machine::new();
 
         m.set_mode(Read);
@@ -1129,8 +1230,6 @@ mod tests {
 
     #[test]
     fn test_unify_variable_write_mode() {
-//        init_test_logger();
-
         let mut m = Machine::new();
 
         m.set_mode(Write);
@@ -1250,31 +1349,6 @@ mod tests {
 
         let mut q = e.parse("p(Z, h(Z, W), f(W)).").unwrap();
         let (instructions, _) = compile_query(&q);
-
-        assert_eq!(instructions, expected_instructions);
-    }
-
-    #[test]
-    fn test_program_instruction_compilation_fig_2_4() {
-        let e = parser::ExpressionParser::new();
-
-        let expected_instructions = vec![
-            Instruction::GetStructure(Functor::from("p/3"), 1),
-            Instruction::UnifyVariable(2),
-            Instruction::UnifyVariable(3),
-            Instruction::UnifyVariable(4),
-            Instruction::GetStructure(Functor::from("f/1"), 2),
-            Instruction::UnifyVariable(5),
-            Instruction::GetStructure(Functor::from("h/2"), 3),
-            Instruction::UnifyValue(4),
-            Instruction::UnifyVariable(6),
-            Instruction::GetStructure(Functor::from("f/1"), 6),
-            Instruction::UnifyVariable(7),
-            Instruction::GetStructure(Functor::from("a/0"), 7)
-        ];
-
-        let mut p = e.parse("p(f(X), h(Y, f(a)), Y).").unwrap();
-        let (instructions, _) = compile_program(&p);
 
         assert_eq!(instructions, expected_instructions);
     }
