@@ -42,7 +42,10 @@ pub enum Instruction {
     SetVariable(Register),
     UnifyVariable(Register),
     SetValue(Register),
-    UnifyValue(Register)
+    UnifyValue(Register),
+    PutVariable(Register, Register),
+    PutValue(Register, Register),
+    Call(Functor)
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
@@ -171,7 +174,10 @@ impl Machine {
             Instruction::SetValue(x) => self.set_value(*x),
             Instruction::UnifyValue(x) => self.unify_value(*x),
             Instruction::SetVariable(x) => self.set_variable(*x),
-            Instruction::UnifyVariable(x) => self.unify_variable(*x)
+            Instruction::UnifyVariable(x) => self.unify_variable(*x),
+            Instruction::PutVariable(x, a) => self.put_variable(*x, *a),
+            Instruction::PutValue(x, a) => self.put_value(*x, *a),
+            Instruction::Call(f) => self.call(f.clone())
         }
     }
 
@@ -1244,7 +1250,6 @@ mod tests {
         register_is(&m, 7, Ref(13));
     }
 
-    #[ignore]
     #[test]
     fn test_instruction_compilation_exercise_2_8() {
         // TODO: fix this test once M1 is complete
@@ -1262,7 +1267,8 @@ mod tests {
                             Term::Compound(Compound {
                                 name: "f".to_string(),
                                 arity: 1,
-                                args: vec![Term::Atom(Atom("a".to_string()))]})
+                                args: vec![Term::Atom(Atom("a".to_string()))]
+                            })
                         ]
                     }
                 ),
@@ -1270,9 +1276,67 @@ mod tests {
             ]
         };
 
+        let expected_query_instructions = vec![
+            Instruction::PutStructure(Functor::from("f/1"), 1),
+            Instruction::SetVariable(4),
+            Instruction::PutStructure(Functor::from("a/0"), 7),
+            Instruction::PutStructure(Functor::from("f/1"), 6),
+            Instruction::SetValue(7),
+            Instruction::PutStructure(Functor::from("h/2"), 2),
+            Instruction::SetVariable(5),
+            Instruction::SetValue(6),
+            Instruction::PutValue(5, 3),
+            Instruction::Call(Functor::from("p/3"))
+        ];
+
         let (query_instructions, _) = compile_query(&q);
 
-        println!("{:?}", query_instructions);
+        assert_eq!(&expected_query_instructions, &query_instructions);
+    }
+
+    #[test]
+    fn test_instruction_compilation_figure_2_9() {
+        // TODO: fix this test once M1 is complete
+        let q = Compound {
+            name: "p".to_string(),
+            arity: 3,
+            args: vec![
+                Term::Var(Var("Z".to_string())),
+                Term::Compound(
+                    Compound {
+                        name: "h".to_string(),
+                        arity: 2,
+                        args: vec![
+                            Term::Var(Var("Z".to_string())),
+                            Term::Var(Var("W".to_string()))
+                        ]
+                    }
+                ),
+                Term::Compound(
+                    Compound {
+                        name: "f".to_string(),
+                        arity: 1,
+                        args: vec![
+                            Term::Var(Var("W".to_string()))
+                        ]
+                    }
+                )
+            ]
+        };
+
+        let expected_query_instructions = vec![
+            Instruction::PutVariable(4, 1),
+            Instruction::PutStructure(Functor::from("h/2"), 2),
+            Instruction::SetValue(4),
+            Instruction::SetVariable(5),
+            Instruction::PutStructure(Functor::from("f/1"), 3),
+            Instruction::SetValue(5),
+            Instruction::Call(Functor::from("p/3"))
+        ];
+
+        let (query_instructions, _) = compile_query(&q);
+
+        assert_eq!(&expected_query_instructions, &query_instructions);
     }
 
     #[test]
