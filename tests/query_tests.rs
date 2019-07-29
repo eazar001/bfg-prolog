@@ -3,6 +3,7 @@ use bfg_prolog::Store::*;
 use bfg_prolog::Cell::{Str, Ref};
 
 
+#[ignore]
 #[test]
 fn test_query_execution_exercise_2_1() {
     let mut m = Machine::new();
@@ -28,6 +29,7 @@ fn test_query_execution_exercise_2_1() {
     assert_eq!(heap_output, &expected_heap_cells)
 }
 
+#[ignore]
 #[test]
 fn test_query_execution_exercise_2_2() {
     let mut m = Machine::new();
@@ -87,6 +89,7 @@ fn test_query_execution_exercise_2_2() {
     assert_eq!(m.get_heap(), &expected_heap_cells);
 }
 
+#[ignore]
 #[test]
 fn test_query_execution_2_5() {
     let mut m = Machine::new();
