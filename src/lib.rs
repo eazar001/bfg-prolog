@@ -46,6 +46,7 @@ pub enum Instruction {
     PutVariable(Register, Register),
     PutValue(Register, Register),
     GetValue(Register, Register),
+    GetVariable(Register, Register),
     Call(Functor),
     Proceed
 }
@@ -180,6 +181,7 @@ impl Machine {
             Instruction::PutVariable(x, a) => self.put_variable(*x, *a),
             Instruction::PutValue(x, a) => self.put_value(*x, *a),
             Instruction::GetValue(x, a) => self.get_value(*x, *a),
+            Instruction::GetVariable(x, a) => self.get_variable(*x, *a),
             Instruction::Call(f) => self.call(f.clone()),
             Instruction::Proceed => self.proceed()
         }
@@ -671,7 +673,7 @@ fn allocate_query_registers(compound: &Compound, x: &mut usize, m: &mut TermMap,
 }
 
 // TODO: make this iterative
-fn allocate_program_registers(compound: &Compound, x: &mut usize, m: &mut TermMap, seen: &mut TermSet, instructions: &mut Instructions) {
+fn allocate_program_registers(depth: usize, compound: &Compound, x: &mut usize, m: &mut TermMap, seen: &mut TermSet, arg_instructions: &mut Instructions, instructions: &mut Instructions) {
     let term = Term::Compound(compound.clone());
 
     if !m.contains_key(&term) {
@@ -689,21 +691,35 @@ fn allocate_program_registers(compound: &Compound, x: &mut usize, m: &mut TermMa
     let f = Functor(compound.name.clone(), compound.arity);
     let t = Term::Compound(compound.clone());
 
-    instructions.push(Instruction::GetStructure(f, *m.get(&t).unwrap()));
+    if depth == 0 {
+        arg_instructions.push(Instruction::GetStructure(f, *m.get(&t).unwrap()));
+    } else {
+        instructions.push(Instruction::GetStructure(f, *m.get(&t).unwrap()));
+    }
+
     seen.insert(t);
 
     for t in &compound.args {
         if !seen.contains(t) {
-            instructions.push(Instruction::UnifyVariable(*m.get(t).unwrap()));
+            if depth == 0 {
+                arg_instructions.push(Instruction::UnifyVariable(*m.get(t).unwrap()));
+            } else {
+                instructions.push(Instruction::UnifyVariable(*m.get(t).unwrap()));
+            }
+
             seen.insert(t.clone());
         } else {
-            instructions.push(Instruction::UnifyValue(*m.get(t).unwrap()));
+            if depth == 0 {
+                arg_instructions.push(Instruction::UnifyValue(*m.get(t).unwrap()));
+            } else {
+                instructions.push(Instruction::UnifyValue(*m.get(t).unwrap()));
+            }
         }
     }
 
     for t in &compound.args {
         if let Term::Compound(ref c) = t {
-            allocate_program_registers(c, x, m, seen, instructions);
+            allocate_program_registers(depth+1, c, x, m, seen, arg_instructions, instructions);
         }
     }
 }
@@ -734,21 +750,41 @@ fn compile_query<T: Structuralize>(term: &T) -> (Instructions, TermMap) {
         }
     }
 
-
     instructions.push(Instruction::Call(Functor(compound.name.clone(), compound.arity)));
-
 
     (instructions, m)
 }
 
 fn compile_program<T: Structuralize>(term: &T) -> (Instructions, TermMap) {
     let mut m = HashMap::new();
-    let mut x = 1;
+    let mut arg_instructions = Vec::new();
     let mut instructions = Vec::new();
     let mut seen = HashSet::new();
 
     let compound = term.structuralize().unwrap();
-    allocate_program_registers(&compound, &mut x, &mut m, &mut seen, &mut instructions);
+
+    for (i, arg) in compound.args.iter().enumerate() {
+        let a = i + 1;
+        let mut x = a + compound.arity;
+
+        if let Term::Var(_) = arg {
+            if !seen.contains(arg) {
+                arg_instructions.push(Instruction::GetVariable(x, a));
+                m.insert(arg.clone(), x);
+                seen.insert(arg.clone());
+            } else {
+                arg_instructions.push(Instruction::GetValue(*m.get(arg).unwrap(), a));
+            }
+        } else {
+            m.insert(arg.clone(), a);
+            seen.insert(arg.clone());
+            allocate_program_registers(0, &arg.structuralize().unwrap(), &mut x, &mut m, &mut seen, &mut arg_instructions, &mut instructions);
+        }
+    }
+
+    instructions.push(Instruction::Proceed);
+    arg_instructions.extend_from_slice(&instructions);
+    let instructions = arg_instructions;
 
     (instructions, m)
 }
@@ -1126,6 +1162,7 @@ mod tests {
         assert_eq!(instructions, expected_instructions);
     }
 
+    #[ignore]
     #[test]
     fn test_program_instruction_compilation_fig_2_4() {
         let e = parser::ExpressionParser::new();
@@ -1410,7 +1447,7 @@ mod tests {
             Instruction::Proceed
         ];
 
-        let (program_instructions, _) = compile_query(&q);
+        let (program_instructions, _) = compile_program(&q);
 
         assert_eq!(&expected_program_instructions, &program_instructions);
     }
