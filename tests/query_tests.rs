@@ -89,7 +89,6 @@ fn test_query_execution_exercise_2_2() {
     assert_eq!(m.get_heap(), &expected_heap_cells);
 }
 
-#[ignore]
 #[test]
 fn test_query_execution_2_5() {
     let mut m = Machine::new();
