@@ -1339,6 +1339,33 @@ mod tests {
             ]
         };
 
+        let p = Compound {
+            name: "p".to_string(),
+            arity: 3,
+            args: vec![
+                Term::Var(Var("Z".to_string())),
+                Term::Compound(
+                    Compound {
+                        name: "h".to_string(),
+                        arity: 2,
+                        args: vec![
+                            Term::Var(Var("Z".to_string())),
+                            Term::Var(Var("W".to_string()))
+                        ]
+                    }
+                ),
+                Term::Compound(
+                    Compound {
+                        name: "f".to_string(),
+                        arity: 1,
+                        args: vec![
+                            Term::Var(Var("W".to_string()))
+                        ]
+                    }
+                )
+            ]
+        };
+
         let expected_query_instructions = vec![
             Instruction::PutStructure(Functor::from("f/1"), 1),
             Instruction::SetVariable(4),
@@ -1352,9 +1379,21 @@ mod tests {
             Instruction::Call(Functor::from("p/3"))
         ];
 
+        let expected_program_instructions = vec![
+            Instruction::GetVariable(4, 1),
+            Instruction::GetStructure(Functor::from("h/2"), 2),
+            Instruction::UnifyValue(4),
+            Instruction::UnifyVariable(5),
+            Instruction::GetStructure(Functor::from("f/1"), 3),
+            Instruction::UnifyValue(5),
+            Instruction::Proceed
+        ];
+
         let (query_instructions, _) = compile_query(&q);
+        let (program_instructions, _) = compile_program(&p);
 
         assert_eq!(&expected_query_instructions, &query_instructions);
+        assert_eq!(&expected_program_instructions, &program_instructions);
     }
 
     #[test]
