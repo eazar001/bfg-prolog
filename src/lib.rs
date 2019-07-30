@@ -688,7 +688,7 @@ fn allocate_query_registers(compound: &Compound, x: &mut usize, m: &mut TermMap,
 }
 
 // TODO: make this iterative
-fn allocate_program_registers(depth: usize, compound: &Compound, x: &mut usize, m: &mut TermMap, seen: &mut TermSet, arg_instructions: &mut Instructions, instructions: &mut Instructions) {
+fn allocate_program_registers(root: bool, compound: &Compound, x: &mut usize, m: &mut TermMap, seen: &mut TermSet, arg_instructions: &mut Instructions, instructions: &mut Instructions) {
     let term = Term::Compound(compound.clone());
 
     if !m.contains_key(&term) {
@@ -706,7 +706,7 @@ fn allocate_program_registers(depth: usize, compound: &Compound, x: &mut usize, 
     let f = Functor(compound.name.clone(), compound.arity);
     let t = Term::Compound(compound.clone());
 
-    if depth == 0 {
+    if root {
         arg_instructions.push(Instruction::GetStructure(f, *m.get(&t).unwrap()));
     } else {
         instructions.push(Instruction::GetStructure(f, *m.get(&t).unwrap()));
@@ -716,7 +716,7 @@ fn allocate_program_registers(depth: usize, compound: &Compound, x: &mut usize, 
 
     for t in &compound.args {
         if !seen.contains(t) {
-            if depth == 0 {
+            if root {
                 arg_instructions.push(Instruction::UnifyVariable(*m.get(t).unwrap()));
             } else {
                 instructions.push(Instruction::UnifyVariable(*m.get(t).unwrap()));
@@ -724,7 +724,7 @@ fn allocate_program_registers(depth: usize, compound: &Compound, x: &mut usize, 
 
             seen.insert(t.clone());
         } else {
-            if depth == 0 {
+            if root {
                 arg_instructions.push(Instruction::UnifyValue(*m.get(t).unwrap()));
             } else {
                 instructions.push(Instruction::UnifyValue(*m.get(t).unwrap()));
@@ -734,7 +734,7 @@ fn allocate_program_registers(depth: usize, compound: &Compound, x: &mut usize, 
 
     for t in &compound.args {
         if let Term::Compound(ref c) = t {
-            allocate_program_registers(depth+1, c, x, m, seen, arg_instructions, instructions);
+            allocate_program_registers(false, c, x, m, seen, arg_instructions, instructions);
         }
     }
 }
@@ -793,7 +793,7 @@ fn compile_program<T: Structuralize>(term: &T) -> (Instructions, TermMap) {
         } else {
             m.insert(arg.clone(), a);
             seen.insert(arg.clone());
-            allocate_program_registers(0, &arg.structuralize().unwrap(), &mut x, &mut m, &mut seen, &mut arg_instructions, &mut instructions);
+            allocate_program_registers(true, &arg.structuralize().unwrap(), &mut x, &mut m, &mut seen, &mut arg_instructions, &mut instructions);
         }
     }
 
@@ -825,6 +825,7 @@ pub fn query(m: &mut Machine, q: &str) -> HashMap<Cell, Term> {
             }
         }
 
+        // TODO: this is very inefficient; make this an internal machine operation
         for instruction in &m.get_code().clone() {
             m.execute(instruction);
         }
