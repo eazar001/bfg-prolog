@@ -92,6 +92,8 @@ pub struct Machine {
     heap: Heap,
     // the "push-down-list" contains StoreAddresses and serves as a unification stack
     pdl: Vec<Store>,
+    code: Instructions,
+    code_address: HashMap<Functor, usize>,
     registers: Registers,
     mode: Mode,
     fail: bool,
@@ -164,6 +166,8 @@ impl Machine {
         Machine {
             heap: Heap::new(),
             pdl: Vec::new(),
+            code: Vec::new(),
+            code_address: HashMap::new(),
             registers: Registers::new(),
             mode: Read,
             fail: false
@@ -185,6 +189,25 @@ impl Machine {
             Instruction::Call(f) => self.call(f.clone()),
             Instruction::Proceed => self.proceed()
         }
+    }
+
+    fn push_instruction(&mut self, instruction: Instruction) {
+        self.code.push(instruction);
+        let ia = self.get_p();
+        self.set_p(ia + 1);
+    }
+
+    pub fn get_code(&self) -> &Instructions {
+        &self.code
+    }
+
+    fn push_code_address(&mut self, fact: Functor) {
+        let a = self.code.len();
+        self.code_address.insert(fact, a);
+    }
+
+    fn get_code_address(&self, fact: Functor) -> usize {
+        *self.code_address.get(&fact).unwrap()
     }
 
     pub fn get_heap(&self) -> &Heap {
@@ -369,25 +392,17 @@ impl Machine {
     }
 
     fn call(&mut self, f: Functor) {
-        let p = self.get_p();
-
-        self.set_cp(p + self.instruction_size(p));
-        self.set_p(self.cp_address(f));
-    }
-
-    fn instruction_size(&self, p: usize) -> usize {
-        1
-//        unimplemented!()
+        let a = self.get_code_address(f);
+        self.set_p(a);
     }
 
     // address of procedure in the code area
     fn cp_address(&self, f: Functor) -> usize {
-        1
-//        unimplemented!()
+        unimplemented!()
     }
 
     fn proceed(&mut self) {
-        self.set_p(self.get_cp());
+        // implemented in L1 as NOP
     }
 
     fn get_variable(&mut self, xn: Register, ai: Register) {
@@ -797,7 +812,20 @@ pub fn query(m: &mut Machine, q: &str) -> HashMap<Cell, Term> {
         let (instructions, term_map) = compile_query(t);
         let mut output = HashMap::new();
 
-        for instruction in &instructions {
+        {
+            let compound = t.structuralize().unwrap();
+            let name = compound.name;
+            let arity = compound.arity;
+            let query_functor = Functor(name, arity);
+
+            m.push_code_address(query_functor);
+
+            for instruction in &instructions {
+                m.push_instruction(instruction.clone());
+            }
+        }
+
+        for instruction in &m.get_code().clone() {
             m.execute(instruction);
         }
 
@@ -1241,7 +1269,7 @@ mod tests {
         m.set_variable(5);
         m.put_structure(Functor::from("f/1"), 3);
         m.set_value(5);
-        m.call(Functor::from("p/3"));
+//        m.call(Functor::from("p/3"));
 
         let expected_heap_cells = vec![
             Ref(0),
@@ -1268,7 +1296,7 @@ mod tests {
         m.set_variable(5);
         m.put_structure(Functor::from("f/1"), 3);
         m.set_value(5);
-        m.call(Functor::from("p/3"));
+//        m.call(Functor::from("p/3"));
 
         m.get_structure(Functor::from("f/1"), 1);
         m.unify_variable(4);
