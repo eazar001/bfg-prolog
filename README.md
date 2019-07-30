@@ -9,4 +9,4 @@ Progress
 - [x] L1 - L0 extended with support for invoking predicate names as procedures
 - [ ] L2 - Flat resolution of programs that support rules, with no backtracking
 - [ ] L3 - Prolog
-- [ ] L4 - An optimized WAM architecture
+- [ ] Final pass - An optimized WAM architecture
