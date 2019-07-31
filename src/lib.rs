@@ -402,6 +402,8 @@ impl Machine {
 
     fn call(&mut self, f: &Functor) {
         let a = self.get_code_address(f);
+        let p = self.get_p();
+        self.set_cp(p+1);
         self.set_p(a);
     }
 
@@ -411,7 +413,8 @@ impl Machine {
     }
 
     fn proceed(&mut self) {
-        // implemented in L1 as NOP
+        let cp = self.get_cp();
+        self.set_p(cp);
     }
 
     fn get_variable(&mut self, xn: Register, ai: Register) {
