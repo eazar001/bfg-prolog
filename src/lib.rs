@@ -48,6 +48,8 @@ pub enum Instruction {
     PutValue(Register, Register),
     GetValue(Register, Register),
     GetVariable(Register, Register),
+    Allocate(usize),
+    Deallocate,
     Call(Functor),
     Proceed
 }
@@ -102,6 +104,7 @@ pub struct Machine {
     // the "push-down-list" contains StoreAddresses and serves as a unification stack
     pdl: Vec<Store>,
     code: Code,
+    stack: Vec<usize>,
     registers: Registers,
     mode: Mode,
     fail: bool,
@@ -175,6 +178,7 @@ impl Machine {
             heap: Heap::new(),
             pdl: Vec::new(),
             code: Code::new(),
+            stack: Vec::new(),
             registers: Registers::new(),
             mode: Read,
             fail: false
@@ -193,6 +197,8 @@ impl Machine {
             Instruction::PutValue(x, a) => self.put_value(*x, *a),
             Instruction::GetValue(x, a) => self.get_value(*x, *a),
             Instruction::GetVariable(x, a) => self.get_variable(*x, *a),
+            Instruction::Allocate(n) => self.allocate(*n),
+            Instruction::Deallocate => self.deallocate(),
             Instruction::Call(f) => self.call(f),
             Instruction::Proceed => self.proceed()
         }
@@ -241,8 +247,37 @@ impl Machine {
         *self.code.code_address.get(fact).unwrap()
     }
 
+    fn get_e(&self) -> usize {
+        self.registers.e
+    }
+
+    fn set_e(&mut self, value: usize) {
+        self.registers.e = value;
+    }
+
     pub fn get_heap(&self) -> &Heap {
         &self.heap
+    }
+
+    pub fn allocate(&mut self, n: usize) {
+        let stack = &self.stack;
+        let e = self.get_e();
+        let new_e = e + stack[e+2] + 3;
+
+        self.stack[new_e] = e;
+        self.stack[new_e+1] = self.get_cp();
+        self.stack[new_e+2] = n;
+        self.set_e(new_e);
+        self.set_p(self.get_p() + 1);
+    }
+
+    pub fn deallocate(&mut self) {
+        let stack = &self.stack;
+        let e = self.get_e();
+        let (new_p, new_e) = (stack[e+1], stack[e]);
+
+        self.set_p(new_p);
+        self.set_e(new_e);
     }
 
     pub fn get_x_registers(&self) -> &HashMap<Register, Cell> {
