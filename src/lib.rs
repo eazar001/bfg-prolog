@@ -186,7 +186,7 @@ impl Machine {
             Instruction::PutValue(x, a) => self.put_value(*x, *a),
             Instruction::GetValue(x, a) => self.get_value(*x, *a),
             Instruction::GetVariable(x, a) => self.get_variable(*x, *a),
-            Instruction::Call(f) => self.call(f.clone()),
+            Instruction::Call(f) => self.call(f),
             Instruction::Proceed => self.proceed()
         }
     }
@@ -197,17 +197,41 @@ impl Machine {
         self.set_p(ia + 1);
     }
 
+    fn push_instructions(&mut self, fact: &Functor, instructions: &Instructions) {
+        self.push_code_address(fact);
+        for instruction in instructions {
+            self.push_instruction(instruction.clone());
+        }
+    }
+
+    fn execute_instructions(&mut self, fact: &Functor) {
+        let mut a = self.get_code_address(fact);
+        let instructions = self.get_code().clone();
+
+        while a < instructions.len() {
+            match &instructions[a] {
+                instruction@Instruction::Proceed | instruction@Instruction::Call(_) => {
+                    self.execute(instruction);
+                    break
+                },
+                instruction => self.execute(instruction)
+            }
+
+            a += 1;
+        }
+    }
+
     pub fn get_code(&self) -> &Instructions {
         &self.code
     }
 
-    fn push_code_address(&mut self, fact: Functor) {
+    fn push_code_address(&mut self, fact: &Functor) {
         let a = self.code.len();
-        self.code_address.insert(fact, a);
+        self.code_address.insert(fact.clone(), a);
     }
 
-    fn get_code_address(&self, fact: Functor) -> usize {
-        *self.code_address.get(&fact).unwrap()
+    fn get_code_address(&self, fact: &Functor) -> usize {
+        *self.code_address.get(fact).unwrap()
     }
 
     pub fn get_heap(&self) -> &Heap {
@@ -220,7 +244,6 @@ impl Machine {
 
     fn push_heap(&mut self, cell: Cell) {
         trace!("\t\tHEAP[{}] <- {}", self.heap.len(), cell);
-
         self.heap.push(cell);
     }
 
@@ -238,7 +261,6 @@ impl Machine {
 
     fn insert_x(&mut self, xi: Register, cell: Cell) -> Option<Cell> {
         trace!("\t\tX{} <- {:?}", xi, cell);
-
         self.registers.x.insert(xi, cell)
     }
 
@@ -248,19 +270,16 @@ impl Machine {
 
     fn inc_s(&mut self, value: usize) {
         trace!("\t\tS <- S + {}", value);
-
         self.registers.s += value;
     }
 
     fn set_s(&mut self, value: usize) {
         trace!("\t\tS <- {}", value);
-
         self.registers.s = value;
     }
 
     fn set_fail(&mut self, value: bool) {
         trace!("\t\tFail <- {}", value);
-
         self.fail = value;
     }
 
@@ -286,13 +305,11 @@ impl Machine {
 
     fn inc_h(&mut self, value: usize) {
         trace!("\t\tH <- H + {}", value);
-
         self.registers.h += value;
     }
 
     fn set_mode(&mut self, mode: Mode) {
         trace!("\t\tMode <- {:?}", mode);
-
         self.mode = mode;
     }
 
@@ -310,9 +327,7 @@ impl Machine {
 
     fn put_structure(&mut self, f: Functor, xi: Register) {
         trace!("put_structure {}, {}:", f, xi);
-
         let h = self.get_h();
-
         self.push_heap(Str(h+1));
         self.push_heap(Func(f));
         self.insert_x(xi, Str(h+1));
@@ -321,9 +336,7 @@ impl Machine {
 
     fn put_variable(&mut self, xn: Register, ai: Register) {
         trace!("put_variable {}, {}", xn, ai);
-
         let h = self.get_h();
-
         self.push_heap(Ref(h));
         self.insert_x(xn, Ref(h));
         self.insert_x(ai, Ref(h));
@@ -332,15 +345,12 @@ impl Machine {
 
     fn put_value(&mut self, xn: Register, ai: Register) {
         trace!("put_value {}, {}", xn, ai);
-
         self.insert_x(ai, self.get_x(xn).cloned().unwrap());
     }
 
     fn set_variable(&mut self, xi: Register) {
         let h = self.get_h();
-
         trace!("set_variable {}:", xi);
-
         self.push_heap(Ref(h));
         self.insert_x(xi, Ref(h));
         self.inc_h(1);
@@ -348,7 +358,6 @@ impl Machine {
 
     fn set_value(&mut self, xi: Register) {
         trace!("set_value {}:", xi);
-
         self.push_heap(self.get_x(xi).cloned().unwrap());
         self.inc_h(1);
     }
@@ -391,7 +400,7 @@ impl Machine {
         }
     }
 
-    fn call(&mut self, f: Functor) {
+    fn call(&mut self, f: &Functor) {
         let a = self.get_code_address(f);
         self.set_p(a);
     }
@@ -407,13 +416,11 @@ impl Machine {
 
     fn get_variable(&mut self, xn: Register, ai: Register) {
         trace!("get_variable {}, {}", xn, ai);
-
         self.insert_x(xn, self.get_x(ai).cloned().unwrap());
     }
 
     fn get_value(&mut self, xn: Register, ai: Register) {
         trace!("get_value {}, {}", xn, ai);
-
         self.unify(XAddr(xn), XAddr(ai));
     }
 
@@ -569,10 +576,8 @@ impl Machine {
         let (a1, a2) = (c1.address().unwrap(), c2.address().unwrap());
 
         if c1.is_ref() && (!c2.is_ref() || a2 < a1) {
-            trace!("\t\tbind: HEAP[{1}] <- {:2?} | ({:3?} -> {:2?})", a1, c2.clone(), c1.clone());
             self.heap[a1] = c2.clone();
         } else {
-            trace!("\t\tbind: HEAP[{1}] <- {:2?} | ({:3?} -> {:2?})", a2, c1.clone(), c2.clone());
             self.heap[a2] = c1.clone();
         }
     }
@@ -817,17 +822,8 @@ pub fn query(m: &mut Machine, q: &str) -> HashMap<Cell, Term> {
             let name = compound.name;
             let arity = compound.arity;
             let query_functor = Functor(name, arity);
-
-            m.push_code_address(query_functor);
-
-            for instruction in &instructions {
-                m.push_instruction(instruction.clone());
-            }
-        }
-
-        // TODO: this is very inefficient; make this an internal machine operation
-        for instruction in &m.get_code().clone() {
-            m.execute(instruction);
+            m.push_instructions(&query_functor, &instructions);
+            m.execute_instructions(&query_functor);
         }
 
         for (term, x) in &term_map {
@@ -904,8 +900,13 @@ pub fn program(m: &mut Machine, p: &str) -> HashMap<Cell, Term> {
         let (instructions, term_map) = compile_program(t);
         let mut output = HashMap::new();
 
-        for instruction in &instructions {
-            m.execute(instruction);
+        {
+            let compound = t.structuralize().unwrap();
+            let name = compound.name;
+            let arity = compound.arity;
+            let program_functor = Functor(name, arity);
+            m.push_instructions(&program_functor, &instructions);
+            m.execute_instructions(&program_functor);
         }
 
         for (term, x) in &term_map {
