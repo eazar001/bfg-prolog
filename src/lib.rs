@@ -22,6 +22,7 @@ lalrpop_mod!(pub parser);
 
 // heap address represented as usize that corresponds to the vector containing cell data
 type HeapAddress = usize;
+type Address =  usize;
 // x-register address which identifies the register that holds the cell data in the corresponding variable
 pub type Register = usize;
 type FunctorArity = usize;
@@ -73,6 +74,12 @@ enum Mode {
     Write
 }
 
+#[derive(Debug, Clone, Eq, PartialEq)]
+struct Code {
+    code_area: Instructions,
+    code_address: HashMap<Functor, usize>
+}
+
 #[derive(Clone, Eq, PartialEq)]
 struct Registers {
     // the "h" counter contains the location of the next cell to be pushed onto the heap
@@ -80,11 +87,13 @@ struct Registers {
     // variable register mapping a variable to cell data (x-register)
     x: HashMap<Register, Cell>,
     // subterm register containing heap address of next subterm to be matched (s-register)
-    s: Register,
+    s: Address,
     // program/instruction counter, containing address of the next instruction to be executed
-    p: Register,
+    p: Address,
     // address of the next instruction in the code area to follow up after successful return from a call
-    cp: Register
+    cp: Address,
+    // address of the latest environment on top of the stack
+    e: Address
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -92,8 +101,7 @@ pub struct Machine {
     heap: Heap,
     // the "push-down-list" contains StoreAddresses and serves as a unification stack
     pdl: Vec<Store>,
-    code: Instructions,
-    code_address: HashMap<Functor, usize>,
+    code: Code,
     registers: Registers,
     mode: Mode,
     fail: bool,
@@ -166,8 +174,7 @@ impl Machine {
         Machine {
             heap: Heap::new(),
             pdl: Vec::new(),
-            code: Vec::new(),
-            code_address: HashMap::new(),
+            code: Code::new(),
             registers: Registers::new(),
             mode: Read,
             fail: false
@@ -192,7 +199,7 @@ impl Machine {
     }
 
     fn push_instruction(&mut self, instruction: Instruction) {
-        self.code.push(instruction);
+        self.code.code_area.push(instruction);
         let ia = self.get_p();
         self.set_p(ia + 1);
     }
@@ -222,16 +229,16 @@ impl Machine {
     }
 
     pub fn get_code(&self) -> &Instructions {
-        &self.code
+        &self.code.code_area
     }
 
     fn push_code_address(&mut self, fact: &Functor) {
-        let a = self.code.len();
-        self.code_address.insert(fact.clone(), a);
+        let a = self.code.code_area.len();
+        self.code.code_address.insert(fact.clone(), a);
     }
 
     fn get_code_address(&self, fact: &Functor) -> usize {
-        *self.code_address.get(fact).unwrap()
+        *self.code.code_address.get(fact).unwrap()
     }
 
     pub fn get_heap(&self) -> &Heap {
@@ -593,7 +600,8 @@ impl Registers {
             x: HashMap::new(),
             s: 0,
             p: 0,
-            cp: 0
+            cp: 0,
+            e: 0
         }
     }
 }
@@ -653,6 +661,15 @@ impl Store {
         match self {
             HeapAddr(addr) => *addr,
             XAddr(addr) => *addr
+        }
+    }
+}
+
+impl Code {
+    fn new() -> Self {
+        Code {
+            code_area: Vec::new(),
+            code_address: HashMap::new()
         }
     }
 }
