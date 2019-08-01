@@ -15,11 +15,18 @@ pub enum Number {
 pub struct Atom(pub String);
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Rule {
+    pub head: Compound,
+    pub body: Vec<Compound>
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Term {
     Var(Var),
     Number(Number),
     Atom(Atom),
-    Compound(Compound)
+    Compound(Compound),
+    Rule(Rule)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -82,7 +89,8 @@ impl Structuralize for Term {
             Term::Compound(c) => c.name.clone(),
             Term::Atom(Atom(a)) => a.clone(),
             Term::Number(Number::Integer(i)) => format!("{}", i),
-            Term::Var(Var(v)) => v.clone()
+            Term::Var(Var(v)) => v.clone(),
+            Term::Rule(Rule {head, ..}) => head.name.clone()
         }
     }
 }
@@ -116,7 +124,8 @@ impl Display for Term {
                         Ok(write!(f, "{}({}", &name, args)?)
                     }
                 }
-            }
+            },
+            r@Term::Rule(_) => Ok(write!(f, "{:?}", r)?)
         }
     }
 }
