@@ -449,11 +449,6 @@ impl Machine {
         self.set_p(a);
     }
 
-    // address of procedure in the code area
-    fn cp_address(&self, f: Functor) -> usize {
-        unimplemented!()
-    }
-
     fn proceed(&mut self) {
         let cp = self.get_cp();
         self.set_p(cp);
@@ -799,10 +794,10 @@ fn allocate_program_registers(root: bool, compound: &Compound, x: &mut usize, m:
     }
 }
 
-fn compile_query<T: Structuralize>(term: &T) -> (Instructions, TermMap) {
-    let mut m = HashMap::new();
+fn compile_query<T: Structuralize>(term: &T, m: &mut TermMap, seen: &mut HashSet<Term>) -> (Instructions, TermMap) {
+//    let mut m = HashMap::new();
     let mut instructions = Vec::new();
-    let mut seen = HashSet::new();
+//    let mut seen = HashSet::new();
 
     let compound = term.structuralize().unwrap();
 
@@ -821,20 +816,19 @@ fn compile_query<T: Structuralize>(term: &T) -> (Instructions, TermMap) {
         } else {
             m.insert(arg.clone(), a);
             seen.insert(arg.clone());
-            allocate_query_registers(&arg.structuralize().unwrap(), &mut x, &mut m, &mut seen, &mut instructions);
+            allocate_query_registers(&arg.structuralize().unwrap(), &mut x, m, seen, &mut instructions);
         }
     }
 
     instructions.push(Instruction::Call(Functor(compound.name.clone(), compound.arity)));
 
-    (instructions, m)
+    (instructions, m.clone())
 }
 
-fn compile_program<T: Structuralize>(term: &T) -> (Instructions, TermMap) {
-    let mut m = HashMap::new();
+fn compile_fact<T: Structuralize>(term: &T, m: &mut TermMap, seen: &mut HashSet<Term>) -> (Instructions, TermMap) {
+//    let mut m = HashMap::new();
     let mut arg_instructions = Vec::new();
     let mut instructions = Vec::new();
-    let mut seen = HashSet::new();
 
     let compound = term.structuralize().unwrap();
 
@@ -853,7 +847,7 @@ fn compile_program<T: Structuralize>(term: &T) -> (Instructions, TermMap) {
         } else {
             m.insert(arg.clone(), a);
             seen.insert(arg.clone());
-            allocate_program_registers(true, &arg.structuralize().unwrap(), &mut x, &mut m, &mut seen, &mut arg_instructions, &mut instructions);
+            allocate_program_registers(true, &arg.structuralize().unwrap(), &mut x, m, seen, &mut arg_instructions, &mut instructions);
         }
     }
 
@@ -861,15 +855,131 @@ fn compile_program<T: Structuralize>(term: &T) -> (Instructions, TermMap) {
     arg_instructions.extend_from_slice(&instructions);
     let instructions = arg_instructions;
 
+    (instructions, m.clone())
+}
+
+fn find_variables(term: &Term, vars: &mut Vec<Term>) {
+    if let Term::Compound(c) = term {
+        for arg in &c.args {
+            if let Term::Var(_) = arg {
+                vars.push(arg.clone());
+            } else if let Term::Compound(Compound {name, arity, .. }) = arg {
+                if *arity > 0 {
+                    find_variables(arg, vars);
+                }
+            }
+        }
+    }
+}
+
+fn find_variable_positions(all_vars: &[Term]) -> Vec<Term> {
+    let mut perm_vars = Vec::new();
+
+    for term in all_vars {
+        if let Term::Var(v) = term {
+            if !perm_vars.contains(term) {
+                perm_vars.push(term.clone());
+            }
+        }
+    }
+
+    perm_vars
+}
+
+fn collect_permanent_variables(rule: &Rule) -> TermMap {
+    let Rule { head, body } = rule;
+    let mut vars = Vec::new();
+    let mut all_vars = Vec::new();
+    let head = Term::Compound(head.structuralize().unwrap());
+    let mut counts = HashMap::new();
+
+    find_variables(&head, &mut vars);
+    find_variables(&Term::Compound(body[0].clone()), &mut vars);
+
+    for head_var in &vars {
+        counts.insert(head_var.clone(), 1);
+    }
+
+    vars.clear();
+
+    for body_term in &body[1..] {
+        find_variables(&Term::Compound(body_term.clone()), &mut vars);
+    }
+
+    for body_var in &vars {
+        match counts.get(body_var).cloned() {
+            Some(c) => counts.insert(body_var.clone(), c+1),
+            None => counts.insert(body_var.clone(), 1)
+        };
+    }
+
+    let vars: Vec<Term> = counts.iter()
+        .filter(|(v,c)| **c > 1)
+        .map(|(v,c)| v.clone()).collect();
+
+    find_variables(&head, &mut all_vars);
+
+    for body_term in body {
+        find_variables(&Term::Compound(body_term.clone()), &mut all_vars);
+    }
+
+    let mut perm_vars = find_variable_positions(&all_vars);
+    let mut temp = Vec::new();
+
+    for term in &perm_vars {
+        if vars.contains(term) && !temp.contains(term) {
+            temp.push(term.clone());
+        }
+    }
+
+    let mut vars = HashMap::new();
+
+    for (i, term) in temp.iter().enumerate() {
+        vars.insert(term.clone(), i+1);
+    }
+
+    vars
+}
+
+fn compile_rule(rule: &Rule) -> (Instructions, TermMap) {
+    let mut m = HashMap::new();
+    let (mut instructions, mut body_instructions) = (Vec::new(), Vec::new());
+    let mut seen = HashSet::new();
+    let y_map = collect_permanent_variables(rule);
+
+    println!("{:?}", y_map);
+
+    let Rule { head: term, body } = rule;
+    let head = Term::Compound(term.clone());
+    let (head_instructions, _) = compile_fact(&head, &mut m, &mut seen);
+    let head_slice = &head_instructions[..head_instructions.len()-1];
+
+    let mut head_instructions = vec![Instruction::Allocate(y_map.len())];
+    head_instructions.extend_from_slice(head_slice);
+
+    for body_term in body {
+        let (body_term_instructions, _) = compile_query(body_term, &mut m, &mut seen);
+        body_instructions.extend(body_term_instructions);
+    }
+
+    body_instructions.push(Instruction::Deallocate);
+    head_instructions.extend(instructions);
+    head_instructions.extend(body_instructions);
+    let instructions = head_instructions;
+
+    println!("{:?}", instructions);
+
     (instructions, m)
 }
 
 pub fn query(m: &mut Machine, q: &str) -> HashMap<Cell, Term> {
     let e = parser::ExpressionParser::new();
     let mut query = e.parse(q).unwrap();
+    let mut seen = HashSet::new();
+    let mut map = HashMap::new();
 
     if let t@Term::Compound(_) | t@Term::Atom(_) = &mut query {
-        let (instructions, term_map) = compile_query(t);
+        let (instructions, term_map) = compile_query(t, &mut map, &mut seen);
         let mut output = HashMap::new();
 
         {
@@ -950,9 +1060,11 @@ pub fn run_query(m: &mut Machine, q: &str, p: &str) -> (QueryBindings, ProgramBi
 pub fn program(m: &mut Machine, p: &str) -> HashMap<Cell, Term> {
     let e = parser::ExpressionParser::new();
     let mut program = e.parse(p).unwrap();
+    let mut map = HashMap::new();
 
     if let t@Term::Compound(_) | t@Term::Atom(_) = &mut program {
-        let (instructions, term_map) = compile_program(t);
+        let mut seen = HashSet::new();
+        let (instructions, term_map) = compile_fact(t, &mut map, &mut seen);
         let mut output = HashMap::new();
 
         {
@@ -1242,7 +1354,9 @@ mod tests {
         ];
 
         let mut p = e.parse("p(Z, h(Z, W), f(W)).").unwrap();
-        let (instructions, _) = compile_query(&p);
+        let mut map = HashMap::new();
+        let mut seen = HashSet::new();
+        let (instructions, _) = compile_query(&p, &mut map, &mut seen);
 
         assert_eq!(instructions, expected_instructions);
     }
@@ -1268,7 +1382,9 @@ mod tests {
         ];
 
         let mut p = e.parse("p(f(X), h(Y, f(a)), Y).").unwrap();
-        let (instructions, _) = compile_program(&p);
+        let mut seen = HashSet::new();
+        let mut map = HashMap::new();
+        let (instructions, _) = compile_fact(&p, &mut map, &mut seen);
 
         assert_eq!(instructions, expected_instructions);
     }
@@ -1307,9 +1423,13 @@ mod tests {
 
         let mut q = e.parse("p(f(X), h(Y, f(a)), Y).").unwrap();
         let mut p = e.parse("p(Z, h(Z, W), f(W)).").unwrap();
+        let mut query_seen = HashSet::new();
+        let mut query_map = HashMap::new();
+        let mut program_seen = HashSet::new();
+        let mut program_map = HashMap::new();
 
-        let (query_instructions, _) = compile_query(&q);
-        let (program_instructions, _) = compile_program(&p);
+        let (query_instructions, _) = compile_query(&q, &mut query_map, &mut query_seen);
+        let (program_instructions, _) = compile_fact(&p, &mut program_map, &mut program_seen);
 
         assert_eq!(expected_query_instructions, query_instructions);
         assert_eq!(expected_program_instructions, program_instructions);
@@ -1474,8 +1594,13 @@ mod tests {
             Instruction::Proceed
         ];
 
-        let (query_instructions, _) = compile_query(&q);
-        let (program_instructions, _) = compile_program(&p);
+        let mut query_seen = HashSet::new();
+        let mut query_map = HashMap::new();
+        let mut program_seen = HashSet::new();
+        let mut program_map = HashMap::new();
+
+        let (query_instructions, _) = compile_query(&q, &mut query_map, &mut query_seen);
+        let (program_instructions, _) = compile_fact(&p, &mut program_map, &mut program_seen);
 
         assert_eq!(&expected_query_instructions, &query_instructions);
         assert_eq!(&expected_program_instructions, &program_instructions);
@@ -1520,9 +1645,42 @@ mod tests {
             Instruction::Call(Functor::from("p/3"))
         ];
 
-        let (query_instructions, _) = compile_query(&q);
+        let mut seen = HashSet::new();
+        let mut map = HashMap::new();
+        let (query_instructions, _) = compile_query(&q, &mut map, &mut seen);
 
         assert_eq!(&expected_query_instructions, &query_instructions);
+    }
+
+    #[test]
+    fn test_instruction_compilation_figure_3_1() {
+        let r = Rule {
+            head: Compound {
+                name: "p".to_string(),
+                arity: 2,
+                args: vec![
+                    Term::Var(Var("X".to_string())),
+                    Term::Var(Var("Y".to_string()))
+                ]},
+            body: vec![
+                Compound {
+                    name: "q".to_string(),
+                    arity: 2,
+                    args: vec![
+                        Term::Var(Var("X".to_string())),
+                        Term::Var(Var("Z".to_string()))
+                    ]},
+                Compound {
+                    name: "r".to_string(),
+                    arity: 2,
+                    args: vec![
+                        Term::Var(Var("Z".to_string())),
+                        Term::Var(Var("Y".to_string()))
+                    ]},
+            ]
+        };
+
+        compile_rule(&r);
     }
 
     #[test]
@@ -1571,7 +1729,9 @@ mod tests {
             Instruction::Proceed
         ];
 
-        let (program_instructions, _) = compile_program(&q);
+        let mut seen = HashSet::new();
+        let mut map = HashMap::new();
+        let (program_instructions, _) = compile_fact(&q, &mut map, &mut seen);
 
         assert_eq!(&expected_program_instructions, &program_instructions);
     }
@@ -1709,7 +1869,9 @@ mod tests {
         ];
 
         let mut q = e.parse("p(Z, h(Z, W), f(W)).").unwrap();
-        let (instructions, _) = compile_query(&q);
+        let mut seen = HashSet::new();
+        let mut map = HashMap::new();
+        let (instructions, _) = compile_query(&q, &mut map, &mut seen);
 
         assert_eq!(instructions, expected_instructions);
     }
