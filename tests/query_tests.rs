@@ -3,6 +3,8 @@ use bfg_prolog::Store::*;
 use bfg_prolog::Cell::{Str, Ref};
 
 
+// TODO: integration tests need to be updated to reflect the transgressions to L2
+
 #[ignore]
 #[test]
 fn test_query_execution_exercise_2_1() {
@@ -26,7 +28,7 @@ fn test_query_execution_exercise_2_1() {
         Str(5)
     ];
 
-    assert_eq!(heap_output, &expected_heap_cells)
+    assert_eq!(&expected_heap_cells, heap_output)
 }
 
 #[ignore]
@@ -56,7 +58,7 @@ fn test_query_execution_exercise_2_2() {
         Ref(15)
     ];
 
-    assert_eq!(m.get_heap(), &expected_heap_cells);
+    assert_eq!(&expected_heap_cells, m.get_heap());
 
     register_is(&m, 1, Str(13));
     register_is(&m, 2, Str(11));
@@ -86,7 +88,7 @@ fn test_query_execution_exercise_2_2() {
         Str(3)
     ];
 
-    assert_eq!(m.get_heap(), &expected_heap_cells);
+    assert_eq!(&expected_heap_cells, m.get_heap());
 }
 
 #[test]
