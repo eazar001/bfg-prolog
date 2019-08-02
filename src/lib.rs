@@ -858,11 +858,11 @@ fn compile_fact<T: Structuralize>(term: &T, m: &mut TermMap, seen: &mut HashSet<
     (instructions, m.clone())
 }
 
-fn find_variables(term: &Term, vars: &mut Vec<Term>) {
+fn find_variables(term: &Term, vars: &mut Vec<Var>) {
     if let Term::Compound(c) = term {
         for arg in &c.args {
-            if let Term::Var(_) = arg {
-                vars.push(arg.clone());
+            if let Term::Var(v) = arg {
+                vars.push(v.clone());
             } else if let Term::Compound(Compound {name, arity, .. }) = arg {
                 if *arity > 0 {
                     find_variables(arg, vars);
@@ -872,14 +872,13 @@ fn find_variables(term: &Term, vars: &mut Vec<Term>) {
     }
 }
 
-fn find_variable_positions(all_vars: &[Term]) -> Vec<Term> {
+fn find_variable_positions(all_vars: &[Var]) -> Vec<Term> {
     let mut perm_vars = Vec::new();
 
-    for term in all_vars {
-        if let Term::Var(v) = term {
-            if !perm_vars.contains(term) {
-                perm_vars.push(term.clone());
-            }
+    for var in all_vars {
+        let t = Term::Var(var.clone());
+        if !perm_vars.contains(&t) {
+            perm_vars.push(t);
         }
     }
 
@@ -915,7 +914,7 @@ fn collect_permanent_variables(rule: &Rule) -> TermMap {
 
     let vars: Vec<Term> = counts.iter()
         .filter(|(v,c)| **c > 1)
-        .map(|(v,c)| v.clone()).collect();
+        .map(|(v,c)| Term::Var(v.clone())).collect();
 
     find_variables(&head, &mut all_vars);
 
