@@ -82,12 +82,12 @@ struct Code {
     code_address: HashMap<Functor, usize>
 }
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 struct Registers {
     // the "h" counter contains the location of the next cell to be pushed onto the heap
     h: HeapAddress,
     // variable register mapping a variable to cell data (x-register)
-    x: HashMap<Register, Cell>,
+    x: Vec<Option<Cell>>,
     // subterm register containing heap address of next subterm to be matched (s-register)
     s: Address,
     // program/instruction counter, containing address of the next instruction to be executed
@@ -108,26 +108,6 @@ pub struct Machine {
     registers: Registers,
     mode: Mode,
     fail: bool,
-}
-
-impl Debug for Registers {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
-        match self.x.len() {
-            0 => Ok(write!(f, "{:?}", self.x.len())?),
-            _ => {
-                let mut keys: Vec<&usize> = self.x.keys().collect();
-                keys.sort();
-
-                write!(f, "[")?;
-
-                for key in &keys[..keys.len()-1] {
-                    write!(f, "{}: {:?}, ", key, self.x[key])?;
-                }
-
-                Ok(write!(f, "{}: {:?}]", keys.len(), self.x[&keys.len()])?)
-            }
-        }
-    }
 }
 
 impl Display for Cell {
@@ -280,7 +260,7 @@ impl Machine {
         self.set_e(new_e);
     }
 
-    pub fn get_x_registers(&self) -> &HashMap<Register, Cell> {
+    pub fn get_x_registers(&self) -> &Vec<Option<Cell>> {
         &self.registers.x
     }
 
@@ -298,12 +278,17 @@ impl Machine {
     }
 
     pub fn get_x(&self, xi: Register) -> Option<&Cell> {
-        self.registers.x.get(&xi)
+        self.get_x_registers()[xi].as_ref()
     }
 
-    fn insert_x(&mut self, xi: Register, cell: Cell) -> Option<Cell> {
+    fn insert_x(&mut self, xi: Register, cell: Cell) {
         trace!("\t\tX{} <- {:?}", xi, cell);
-        self.registers.x.insert(xi, cell)
+
+        if xi >= self.registers.x.len() {
+            self.registers.x.resize(xi+1, None);
+        }
+
+        self.registers.x[xi] = Some(cell);
     }
 
     fn get_s(&self) -> Register {
@@ -533,7 +518,7 @@ impl Machine {
                 self.unify(XAddr(xi), HeapAddr(s))
             },
             Write => {
-                self.push_heap(self.get_x(xi).unwrap().clone());
+                self.push_heap(self.get_x(xi).cloned().unwrap());
                 self.inc_h(1);
             }
         }
@@ -627,7 +612,7 @@ impl Registers {
     fn new() -> Registers {
         Registers {
             h: 0,
-            x: HashMap::new(),
+            x: Vec::new(),
             s: 0,
             p: 0,
             cp: 0,
@@ -778,12 +763,10 @@ fn allocate_program_registers(root: bool, compound: &Compound, x: &mut usize, m:
             }
 
             seen.insert(t.clone());
+        } else if root {
+            arg_instructions.push(Instruction::UnifyValue(*m.get(t).unwrap()));
         } else {
-            if root {
-                arg_instructions.push(Instruction::UnifyValue(*m.get(t).unwrap()));
-            } else {
-                instructions.push(Instruction::UnifyValue(*m.get(t).unwrap()));
-            }
+            instructions.push(Instruction::UnifyValue(*m.get(t).unwrap()));
         }
     }
 
@@ -986,7 +969,7 @@ pub fn query(m: &mut Machine, q: &str) -> HashMap<Cell, Term> {
         }
 
         for (term, x) in &map {
-            output.insert(m.get_x(*x).unwrap().clone(), term.clone());
+            output.insert(m.get_x(*x).cloned().unwrap(), term.clone());
         }
 
         output
@@ -1071,7 +1054,7 @@ pub fn program(m: &mut Machine, p: &str) -> HashMap<Cell, Term> {
         }
 
         for (term, x) in &map {
-            output.insert(m.get_x(*x).unwrap().clone(), term.clone());
+            output.insert(m.get_x(*x).cloned().unwrap(), term.clone());
         }
 
         output
