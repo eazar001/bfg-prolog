@@ -278,17 +278,17 @@ impl Machine {
     }
 
     pub fn get_x(&self, xi: Register) -> Option<&Cell> {
-        self.get_x_registers()[xi].as_ref()
+        self.get_x_registers()[xi-1].as_ref()
     }
 
     fn insert_x(&mut self, xi: Register, cell: Cell) {
         trace!("\t\tX{} <- {:?}", xi, cell);
 
-        if xi >= self.registers.x.len() {
-            self.registers.x.resize(xi+1, None);
+        if xi > self.registers.x.len() {
+            self.registers.x.resize(xi, None);
         }
 
-        self.registers.x[xi] = Some(cell);
+        self.registers.x[xi-1] = Some(cell);
     }
 
     fn get_s(&self) -> Register {
@@ -1131,31 +1131,31 @@ mod tests {
     fn test_set_variable() {
         let mut m = Machine::new();
 
-        m.set_variable(0);
+        m.set_variable(1);
 
         let expected_heap_cells = vec![Ref(0)];
         let heap_cells = &m.heap;
 
         assert_eq!(heap_cells, &expected_heap_cells);
-        register_is(&m, 0, Ref(0));
+        register_is(&m, 1, Ref(0));
     }
 
     #[test]
     fn test_set_value() {
         let mut m = Machine::new();
 
-        m.set_variable(0);
         m.set_variable(1);
+        m.set_variable(2);
 
-        m.set_value(0);
         m.set_value(1);
+        m.set_value(2);
 
         let expected_heap_cells = vec![Ref(0), Ref(1), Ref(0), Ref(1)];
         let heap_cells = &m.heap;
 
         assert_eq!(heap_cells, &expected_heap_cells);
-        register_is(&m, 0, Ref(0));
-        register_is(&m, 1, Ref(1));
+        register_is(&m, 1, Ref(0));
+        register_is(&m, 2, Ref(1));
         assert_eq!(m.registers.x.len(), 2);
     }
 
@@ -1163,10 +1163,10 @@ mod tests {
     fn test_put_structure() {
         let mut m = Machine::new();
 
-        m.put_structure(Functor(String::from("foo"), 2), 0);
-        m.set_variable(1);
+        m.put_structure(Functor(String::from("foo"), 2), 1);
         m.set_variable(2);
-        m.set_value(1);
+        m.set_variable(3);
+        m.set_value(2);
 
         let expected_heap_cells = vec![
             Str(1),
@@ -1178,10 +1178,11 @@ mod tests {
 
         let heap_cells = &m.heap;
 
+        println!("{:?}", m.get_x_registers());
         assert_eq!(heap_cells, &expected_heap_cells);
-        register_is(&m, 0, Str(1));
-        register_is(&m, 1, Ref(2));
-        register_is(&m, 2, Ref(3));
+        register_is(&m, 1, Str(1));
+        register_is(&m, 2, Ref(2));
+        register_is(&m, 3, Ref(3));
         assert_eq!(m.registers.x.len(), 3);
     }
 
