@@ -6,6 +6,7 @@ pub mod ast;
 
 use self::Cell::*;
 use self::Store::*;
+use self::Register::*;
 use self::Mode::{Read, Write};
 use self::ast::*;
 use std::collections::{HashMap, HashSet};
@@ -23,8 +24,15 @@ lalrpop_mod!(pub parser);
 // heap address represented as usize that corresponds to the vector containing cell data
 type HeapAddress = usize;
 type Address =  usize;
-// x-register address which identifies the register that holds the cell data in the corresponding variable
-pub type Register = usize;
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, PartialOrd, Ord)]
+pub enum Register {
+    // temporary
+    X(usize),
+    // permanent
+    Y(usize)
+}
+
 type FunctorArity = usize;
 type FunctorName = String;
 // the "global stack"
@@ -67,7 +75,7 @@ pub enum Cell {
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Store {
     HeapAddr(HeapAddress),
-    XAddr(Register)
+    Register(Register)
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -265,7 +273,6 @@ impl Machine {
     }
 
     fn push_heap(&mut self, cell: Cell) {
-        trace!("\t\tHEAP[{}] <- {}", self.heap.len(), cell);
         self.heap.push(cell);
     }
 
@@ -277,13 +284,25 @@ impl Machine {
         self.fail
     }
 
-    pub fn get_x(&self, xi: Register) -> Option<&Cell> {
+    pub fn get_register(&self, register: Register) -> Option<&Cell> {
+        match register {
+            Register::X(xi) => self.get_x(xi),
+            _ => None
+        }
+    }
+
+    pub fn get_x(&self, xi: usize) -> Option<&Cell> {
         self.get_x_registers()[xi-1].as_ref()
     }
 
-    fn insert_x(&mut self, xi: Register, cell: Cell) {
-        trace!("\t\tX{} <- {:?}", xi, cell);
+    fn insert_register(&mut self, register: Register, cell: Cell) {
+        match register {
+            Register::X(xi) => self.insert_x(xi, cell),
+            _ => ()
+        }
+    }
 
+    fn insert_x(&mut self, xi: usize, cell: Cell) {
         if xi > self.registers.x.len() {
             self.registers.x.resize(xi, None);
         }
@@ -291,22 +310,19 @@ impl Machine {
         self.registers.x[xi-1] = Some(cell);
     }
 
-    fn get_s(&self) -> Register {
+    fn get_s(&self) -> HeapAddress {
         self.registers.s
     }
 
     fn inc_s(&mut self, value: usize) {
-        trace!("\t\tS <- S + {}", value);
         self.registers.s += value;
     }
 
     fn set_s(&mut self, value: usize) {
-        trace!("\t\tS <- {}", value);
         self.registers.s = value;
     }
 
     fn set_fail(&mut self, value: bool) {
-        trace!("\t\tFail <- {}", value);
         self.fail = value;
     }
 
@@ -331,12 +347,10 @@ impl Machine {
     }
 
     fn inc_h(&mut self, value: usize) {
-        trace!("\t\tH <- H + {}", value);
         self.registers.h += value;
     }
 
     fn set_mode(&mut self, mode: Mode) {
-        trace!("\t\tMode <- {:?}", mode);
         self.mode = mode;
     }
 
@@ -353,39 +367,34 @@ impl Machine {
     }
 
     fn put_structure(&mut self, f: Functor, xi: Register) {
-        trace!("put_structure {}, {}:", f, xi);
         let h = self.get_h();
         self.push_heap(Str(h+1));
         self.push_heap(Func(f));
-        self.insert_x(xi, Str(h+1));
+        self.insert_register(xi, Str(h+1));
         self.inc_h(2);
     }
 
     fn put_variable(&mut self, xn: Register, ai: Register) {
-        trace!("put_variable {}, {}", xn, ai);
         let h = self.get_h();
         self.push_heap(Ref(h));
-        self.insert_x(xn, Ref(h));
-        self.insert_x(ai, Ref(h));
+        self.insert_register(xn, Ref(h));
+        self.insert_register(ai, Ref(h));
         self.inc_h(1);
     }
 
     fn put_value(&mut self, xn: Register, ai: Register) {
-        trace!("put_value {}, {}", xn, ai);
-        self.insert_x(ai, self.get_x(xn).cloned().unwrap());
+        self.insert_register(ai, self.get_register(xn).cloned().unwrap());
     }
 
     fn set_variable(&mut self, xi: Register) {
         let h = self.get_h();
-        trace!("set_variable {}:", xi);
         self.push_heap(Ref(h));
-        self.insert_x(xi, Ref(h));
+        self.insert_register(xi, Ref(h));
         self.inc_h(1);
     }
 
     fn set_value(&mut self, xi: Register) {
-        trace!("set_value {}:", xi);
-        self.push_heap(self.get_x(xi).cloned().unwrap());
+        self.push_heap(self.get_register(xi).cloned().unwrap());
         self.inc_h(1);
     }
 
@@ -396,9 +405,10 @@ impl Machine {
         loop {
             let (cell, a) = match address {
                 HeapAddr(addr) => (&self.heap[addr], addr),
-                XAddr(addr) => {
-                    let e = &format!("Illegal access: register {}, does not exist", addr);
-                    let c = self.get_x(addr).expect(e);
+                Store::Register(r) => {
+                    let addr = r.address();
+                    let e = &format!("Illegal access: register {:?}, does not exist", addr);
+                    let c = self.get_register(r).expect(e);
 
                     (c, addr)
                 }
@@ -411,17 +421,14 @@ impl Machine {
                         address = HeapAddr(*value);
                     } else {
                         // ref cell is unbound return the address
-                        trace!("\t\tderef: {:?} -> {:?}", start_address, address);
                         return address
                     }
                 },
                 Str(_) => {
-                    trace!("\t\tderef: {:?} -> {:?}", start_address, address);
                     return address
                 },
                 Func(_) => {
-                    trace!("\t\tderef: {:?} -> {:?}", start_address, address);
-                    return address
+                           return address
                 }
             }
         }
@@ -440,21 +447,17 @@ impl Machine {
     }
 
     fn get_variable(&mut self, xn: Register, ai: Register) {
-        trace!("get_variable {}, {}", xn, ai);
-        self.insert_x(xn, self.get_x(ai).cloned().unwrap());
+        self.insert_register(xn, self.get_register(ai).cloned().unwrap());
     }
 
     fn get_value(&mut self, xn: Register, ai: Register) {
-        trace!("get_value {}, {}", xn, ai);
-        self.unify(XAddr(xn), XAddr(ai));
+        self.unify(Store::Register(xn), Store::Register(ai));
     }
 
     fn get_structure(&mut self, f: Functor, xi: Register) {
-        trace!("get_structure {}, {}:", f, xi);
-
-        let (cell, address) = match self.deref(XAddr(xi)) {
+        let (cell, address) = match self.deref(Store::Register(xi)) {
             HeapAddr(addr) => (&self.heap[addr], addr),
-            XAddr(addr) => (self.get_x(xi).unwrap(), addr)
+            Store::Register(r) => (self.get_register(xi).unwrap(), r.address())
         };
 
         match cell.clone() {
@@ -488,19 +491,17 @@ impl Machine {
     }
 
     fn unify_variable(&mut self, xi: Register) {
-        trace!("unify_variable {} ({:?}): ", xi, self.mode);
-
         match self.mode {
             Read => {
                 let s = self.get_s();
 
-                self.insert_x(xi, self.heap[s].clone());
+                self.insert_register(xi, self.heap[s].clone());
             },
             Write => {
                 let h = self.get_h();
 
                 self.push_heap(Ref(h));
-                self.insert_x(xi, Ref(h));
+                self.insert_register(xi, Ref(h));
                 self.inc_h(1);
             }
         }
@@ -509,16 +510,14 @@ impl Machine {
     }
 
     fn unify_value(&mut self, xi: Register) {
-        trace!("unify_value {} ({:?}): ", xi, self.mode);
-
         match self.mode {
             Read => {
                 let s = self.get_s();
 
-                self.unify(XAddr(xi), HeapAddr(s))
+                self.unify(Store::Register(xi), Store::HeapAddr(s))
             },
             Write => {
-                self.push_heap(self.get_x(xi).cloned().unwrap());
+                self.push_heap(self.get_register(xi).cloned().unwrap());
                 self.inc_h(1);
             }
         }
@@ -527,8 +526,6 @@ impl Machine {
     }
 
     pub fn unify(&mut self, a1: Store, a2: Store) {
-        trace!("\t\tunify {:?}, {:?}:", a1, a2);
-
         self.push_pdl(a1);
         self.push_pdl(a2);
 
@@ -570,7 +567,6 @@ impl Machine {
         match cell {
             Str(addr) => {
                 if let Func(f) = &self.heap[*addr] {
-                    trace!("\t\tget_functor: {:?} -> {}", cell, f);
                     &f
                 } else {
                     error!("encountered a structure that doesn't point to a functor");
@@ -579,7 +575,6 @@ impl Machine {
             },
             Func(f) => {
                 warn!("accessing a functor from a functor-cell, but this normally shouldn't happen");
-                trace!("\t\tget_functor: {:?} -> {}", cell, f);
                 f
             },
             Ref(_) => {
@@ -592,7 +587,7 @@ impl Machine {
     fn get_store_cell(&self, address: Store) -> &Cell {
         match address {
             HeapAddr(addr) => &self.heap[addr],
-            XAddr(addr) => self.get_x(addr).unwrap()
+            Register(r) => self.get_register(r).unwrap()
         }
     }
 
@@ -604,6 +599,27 @@ impl Machine {
             self.heap[a1] = c2.clone();
         } else {
             self.heap[a2] = c1.clone();
+        }
+    }
+}
+
+impl Register {
+    fn is_x(&self) -> bool {
+        if let Register::X(_) = self {
+            return true
+        }
+
+        false
+    }
+
+    fn is_y(&self) -> bool {
+        !self.is_x()
+    }
+
+    fn address(&self) -> usize {
+        match self {
+            Register::X(a) => *a,
+            Register::Y(a) => *a
         }
     }
 }
@@ -665,7 +681,15 @@ impl Store {
     }
 
     fn is_x(&self) -> bool {
-        if let XAddr(_) = self {
+        if let Store::Register(Register::X(_)) = self {
+            return true
+        }
+
+        false
+    }
+
+    fn is_y(&self) -> bool {
+        if let Store::Register(Register::Y(_)) = self {
             return true
         }
 
@@ -675,7 +699,7 @@ impl Store {
     fn address(&self) -> usize {
         match self {
             HeapAddr(addr) => *addr,
-            XAddr(addr) => *addr
+            Store::Register(r) => r.address()
         }
     }
 }
@@ -694,13 +718,13 @@ fn allocate_query_registers(compound: &Compound, x: &mut usize, m: &mut TermMap,
     let term = Term::Compound(compound.clone());
 
     if !m.contains_key(&term) {
-        m.insert(term, *x);
+        m.insert(term, X(*x));
         *x += 1;
     }
 
     for t in &compound.args {
         if !m.contains_key(&t) {
-            m.insert(t.clone(), *x);
+            m.insert(t.clone(), X(*x));
             *x += 1;
         }
     }
@@ -732,13 +756,13 @@ fn allocate_program_registers(root: bool, compound: &Compound, x: &mut usize, m:
     let term = Term::Compound(compound.clone());
 
     if !m.contains_key(&term) {
-        m.insert(term, *x);
+        m.insert(term, X(*x));
         *x += 1;
     }
 
     for t in &compound.args {
         if !m.contains_key(&t) {
-            m.insert(t.clone(), *x);
+            m.insert(t.clone(), X(*x));
             *x += 1;
         }
     }
@@ -788,14 +812,19 @@ fn compile_query<T: Structuralize>(term: &T, m: &mut TermMap, seen: &mut TermSet
 
         if let Term::Var(_) = arg {
             if !seen.contains(arg) {
-                instructions.push(Instruction::PutVariable(x, a));
-                m.insert(arg.clone(), x);
+                if m.contains_key(arg) {
+                    instructions.push(Instruction::PutVariable(*m.get(&arg).unwrap(), X(a)));
+                } else {
+                    instructions.push(Instruction::PutVariable(X(x), X(a)));
+                    m.insert(arg.clone(), X(x));
+                }
+
                 seen.insert(arg.clone());
             } else {
-                instructions.push(Instruction::PutValue(*m.get(arg).unwrap(), a));
+                instructions.push(Instruction::PutValue(*m.get(arg).unwrap(), X(a)));
             }
         } else {
-            m.insert(arg.clone(), a);
+            m.insert(arg.clone(), X(a));
             seen.insert(arg.clone());
             allocate_query_registers(&arg.structuralize().unwrap(), &mut x, m, seen, &mut instructions);
         }
@@ -818,14 +847,19 @@ fn compile_fact<T: Structuralize>(term: &T, m: &mut TermMap, seen: &mut HashSet<
 
         if let Term::Var(_) = arg {
             if !seen.contains(arg) {
-                arg_instructions.push(Instruction::GetVariable(x, a));
-                m.insert(arg.clone(), x);
+                if m.contains_key(arg) {
+                    arg_instructions.push(Instruction::GetVariable(*m.get(&arg).unwrap(), X(a)));
+                } else {
+                    arg_instructions.push(Instruction::GetVariable(X(x), X(a)));
+                    m.insert(arg.clone(), X(x));
+                }
+
                 seen.insert(arg.clone());
             } else {
-                arg_instructions.push(Instruction::GetValue(*m.get(arg).unwrap(), a));
+                arg_instructions.push(Instruction::GetValue(*m.get(arg).unwrap(), X(a)));
             }
         } else {
-            m.insert(arg.clone(), a);
+            m.insert(arg.clone(), X(a));
             seen.insert(arg.clone());
             allocate_program_registers(true, &arg.structuralize().unwrap(), &mut x, m, seen, &mut arg_instructions, &mut instructions);
         }
@@ -914,7 +948,7 @@ fn collect_permanent_variables(rule: &Rule) -> TermMap {
     let mut vars = HashMap::new();
 
     for (i, term) in temp.iter().enumerate() {
-        vars.insert(term.clone(), i+1);
+        vars.insert(term.clone(), Y(i+1));
     }
 
     vars
@@ -923,15 +957,16 @@ fn collect_permanent_variables(rule: &Rule) -> TermMap {
 fn compile_rule(rule: &Rule, m: &mut TermMap, seen: &mut TermSet) -> Instructions {
     let (mut instructions, mut body_instructions) = (Vec::new(), Vec::new());
     let y_map = collect_permanent_variables(rule);
+    let n = y_map.len();
 
-    println!("{:?}", y_map);
+    m.extend(y_map);
 
     let Rule { head: term, body } = rule;
     let head = Term::Compound(term.clone());
     let head_instructions = compile_fact(&head, m, seen);
     let head_slice = &head_instructions[..head_instructions.len()-1];
 
-    let mut head_instructions = vec![Instruction::Allocate(y_map.len())];
+    let mut head_instructions = vec![Instruction::Allocate(n)];
     head_instructions.extend_from_slice(head_slice);
 
     for body_term in body {
@@ -969,7 +1004,7 @@ pub fn query(m: &mut Machine, q: &str) -> HashMap<Cell, Term> {
         }
 
         for (term, x) in &map {
-            output.insert(m.get_x(*x).cloned().unwrap(), term.clone());
+            output.insert(m.get_register(*x).cloned().unwrap(), term.clone());
         }
 
         output
@@ -1054,7 +1089,7 @@ pub fn program(m: &mut Machine, p: &str) -> HashMap<Cell, Term> {
         }
 
         for (term, x) in &map {
-            output.insert(m.get_x(*x).cloned().unwrap(), term.clone());
+            output.insert(m.get_register(*x).cloned().unwrap(), term.clone());
         }
 
         output
@@ -1131,31 +1166,31 @@ mod tests {
     fn test_set_variable() {
         let mut m = Machine::new();
 
-        m.set_variable(1);
+        m.set_variable(X(1));
 
         let expected_heap_cells = vec![Ref(0)];
         let heap_cells = &m.heap;
 
         assert_eq!(heap_cells, &expected_heap_cells);
-        register_is(&m, 1, Ref(0));
+        register_is(&m, X(1), Ref(0));
     }
 
     #[test]
     fn test_set_value() {
         let mut m = Machine::new();
 
-        m.set_variable(1);
-        m.set_variable(2);
+        m.set_variable(X(1));
+        m.set_variable(X(2));
 
-        m.set_value(1);
-        m.set_value(2);
+        m.set_value(X(1));
+        m.set_value(X(2));
 
         let expected_heap_cells = vec![Ref(0), Ref(1), Ref(0), Ref(1)];
         let heap_cells = &m.heap;
 
         assert_eq!(heap_cells, &expected_heap_cells);
-        register_is(&m, 1, Ref(0));
-        register_is(&m, 2, Ref(1));
+        register_is(&m, X(1), Ref(0));
+        register_is(&m, X(2), Ref(1));
         assert_eq!(m.registers.x.len(), 2);
     }
 
@@ -1163,10 +1198,10 @@ mod tests {
     fn test_put_structure() {
         let mut m = Machine::new();
 
-        m.put_structure(Functor(String::from("foo"), 2), 1);
-        m.set_variable(2);
-        m.set_variable(3);
-        m.set_value(2);
+        m.put_structure(Functor(String::from("foo"), 2), X(1));
+        m.set_variable(X(2));
+        m.set_variable(X(3));
+        m.set_value(X(2));
 
         let expected_heap_cells = vec![
             Str(1),
@@ -1180,9 +1215,9 @@ mod tests {
 
         println!("{:?}", m.get_x_registers());
         assert_eq!(heap_cells, &expected_heap_cells);
-        register_is(&m, 1, Str(1));
-        register_is(&m, 2, Ref(2));
-        register_is(&m, 3, Ref(3));
+        register_is(&m, X(1), Str(1));
+        register_is(&m, X(2), Ref(2));
+        register_is(&m, X(3), Ref(3));
         assert_eq!(m.registers.x.len(), 3);
     }
 
@@ -1209,22 +1244,22 @@ mod tests {
         assert_eq!(m.deref(HeapAddr(4)), HeapAddr(4));
         assert_eq!(m.deref(HeapAddr(5)), HeapAddr(5));
         assert_eq!(m.deref(HeapAddr(6)), HeapAddr(3));
-        assert_eq!(m.deref(XAddr(3)), HeapAddr(4));
+        assert_eq!(m.deref(Register(X(3))), HeapAddr(4));
     }
 
     #[test]
     fn test_exercise_2_1() {
         let mut m = Machine::new();
 
-        m.put_structure(Functor::from("h/2"), 3);
-        m.set_variable(2);
-        m.set_variable(5);
-        m.put_structure(Functor::from("f/1"), 4);
-        m.set_value(5);
-        m.put_structure(Functor::from("p/3"), 1);
-        m.set_value(2);
-        m.set_value(3);
-        m.set_value(4);
+        m.put_structure(Functor::from("h/2"), X(3));
+        m.set_variable(X(2));
+        m.set_variable(X(5));
+        m.put_structure(Functor::from("f/1"), X(4));
+        m.set_value(X(5));
+        m.put_structure(Functor::from("p/3"), X(1));
+        m.set_value(X(2));
+        m.set_value(X(3));
+        m.set_value(X(4));
 
 
         let expected_heap_cells = vec![
@@ -1245,39 +1280,39 @@ mod tests {
         let heap_cells = &m.heap;
         assert_eq!(heap_cells, &expected_heap_cells);
 
-        register_is(&m, 1, Str(8));
-        register_is(&m, 2, Ref(2));
-        register_is(&m, 3, Str(1));
-        register_is(&m, 4, Str(5));
-        register_is(&m, 5, Ref(3));
+        register_is(&m, X(1), Str(8));
+        register_is(&m, X(2), Ref(2));
+        register_is(&m, X(3), Str(1));
+        register_is(&m, X(4), Str(5));
+        register_is(&m, X(5), Ref(3));
     }
 
     #[test]
     fn test_exercise_2_3() {
         let mut m = Machine::new();
 
-        m.put_structure(Functor::from("h/2"), 3);
-        m.set_variable(2);
-        m.set_variable(5);
-        m.put_structure(Functor::from("f/1"), 4);
-        m.set_value(5);
-        m.put_structure(Functor::from("p/3"), 1);
-        m.set_value(2);
-        m.set_value(3);
-        m.set_value(4);
+        m.put_structure(Functor::from("h/2"), X(3));
+        m.set_variable(X(2));
+        m.set_variable(X(5));
+        m.put_structure(Functor::from("f/1"), X(4));
+        m.set_value(X(5));
+        m.put_structure(Functor::from("p/3"), X(1));
+        m.set_value(X(2));
+        m.set_value(X(3));
+        m.set_value(X(4));
 
-        m.get_structure(Functor::from("p/3"), 1);
-        m.unify_variable(2);
-        m.unify_variable(3);
-        m.unify_variable(4);
-        m.get_structure(Functor::from("f/1"), 2);
-        m.unify_variable(5);
-        m.get_structure(Functor::from("h/2"), 3);
-        m.unify_value(4);
-        m.unify_variable(6);
-        m.get_structure(Functor::from("f/1"), 6);
-        m.unify_variable(7);
-        m.get_structure(Functor::from("a/0"), 7);
+        m.get_structure(Functor::from("p/3"), X(1));
+        m.unify_variable(X(2));
+        m.unify_variable(X(3));
+        m.unify_variable(X(4));
+        m.get_structure(Functor::from("f/1"), X(2));
+        m.unify_variable(X(5));
+        m.get_structure(Functor::from("h/2"), X(3));
+        m.unify_value(X(4));
+        m.unify_variable(X(6));
+        m.get_structure(Functor::from("f/1"), X(6));
+        m.unify_variable(X(7));
+        m.get_structure(Functor::from("a/0"), X(7));
 
         let expected_heap_cells = vec![
             Str(1),
@@ -1307,13 +1342,13 @@ mod tests {
         assert_eq!(heap_cells, &expected_heap_cells);
 
 
-        register_is(&m, 1, Str(8));
-        register_is(&m, 2, Ref(2));
-        register_is(&m, 3, Str(1));
-        register_is(&m, 4, Str(5));
-        register_is(&m, 5, Ref(14));
-        register_is(&m, 6, Ref(3));
-        register_is(&m, 7, Ref(17));
+        register_is(&m, X(1), Str(8));
+        register_is(&m, X(2), Ref(2));
+        register_is(&m, X(3), Str(1));
+        register_is(&m, X(4), Str(5));
+        register_is(&m, X(5), Ref(14));
+        register_is(&m, X(6), Ref(3));
+        register_is(&m, X(7), Ref(17));
     }
 
     #[ignore]
@@ -1322,15 +1357,15 @@ mod tests {
         let e = parser::ExpressionParser::new();
 
         let expected_instructions = vec![
-            Instruction::PutStructure(Functor::from("h/2"), 3),
-            Instruction::SetVariable(2),
-            Instruction::SetVariable(5),
-            Instruction::PutStructure(Functor::from("f/1"), 4),
-            Instruction::SetValue(5),
-            Instruction::PutStructure(Functor::from("p/3"), 1),
-            Instruction::SetValue(2),
-            Instruction::SetValue(3),
-            Instruction::SetValue(4)
+            Instruction::PutStructure(Functor::from("h/2"), X(3)),
+            Instruction::SetVariable(X(2)),
+            Instruction::SetVariable(X(5)),
+            Instruction::PutStructure(Functor::from("f/1"), X(4)),
+            Instruction::SetValue(X(5)),
+            Instruction::PutStructure(Functor::from("p/3"), X(1)),
+            Instruction::SetValue(X(2)),
+            Instruction::SetValue(X(3)),
+            Instruction::SetValue(X(4))
         ];
 
         let mut p = e.parse("p(Z, h(Z, W), f(W)).").unwrap();
@@ -1347,18 +1382,18 @@ mod tests {
         let e = parser::ExpressionParser::new();
 
         let expected_instructions = vec![
-            Instruction::GetStructure(Functor::from("p/3"), 1),
-            Instruction::UnifyVariable(2),
-            Instruction::UnifyVariable(3),
-            Instruction::UnifyVariable(4),
-            Instruction::GetStructure(Functor::from("f/1"), 2),
-            Instruction::UnifyVariable(5),
-            Instruction::GetStructure(Functor::from("h/2"), 3),
-            Instruction::UnifyValue(4),
-            Instruction::UnifyVariable(6),
-            Instruction::GetStructure(Functor::from("f/1"), 6),
-            Instruction::UnifyVariable(7),
-            Instruction::GetStructure(Functor::from("a/0"), 7)
+            Instruction::GetStructure(Functor::from("p/3"), X(1)),
+            Instruction::UnifyVariable(X(2)),
+            Instruction::UnifyVariable(X(3)),
+            Instruction::UnifyVariable(X(4)),
+            Instruction::GetStructure(Functor::from("f/1"), X(2)),
+            Instruction::UnifyVariable(X(5)),
+            Instruction::GetStructure(Functor::from("h/2"), X(3)),
+            Instruction::UnifyValue(X(4)),
+            Instruction::UnifyVariable(X(6)),
+            Instruction::GetStructure(Functor::from("f/1"), X(6)),
+            Instruction::UnifyVariable(X(7)),
+            Instruction::GetStructure(Functor::from("a/0"), X(7))
         ];
 
         let mut p = e.parse("p(f(X), h(Y, f(a)), Y).").unwrap();
@@ -1375,30 +1410,30 @@ mod tests {
         let e = parser::ExpressionParser::new();
 
         let expected_query_instructions = vec![
-            Instruction::PutStructure(Functor::from("f/1"), 2),
-            Instruction::SetVariable(5),
-            Instruction::PutStructure(Functor::from("a/0"), 7),
-            Instruction::PutStructure(Functor::from("f/1"), 6),
-            Instruction::SetValue(7),
-            Instruction::PutStructure(Functor::from("h/2"), 3),
-            Instruction::SetVariable(4),
-            Instruction::SetValue(6),
-            Instruction::PutStructure(Functor::from("p/3"), 1),
-            Instruction::SetValue(2),
-            Instruction::SetValue(3),
-            Instruction::SetValue(4)
+            Instruction::PutStructure(Functor::from("f/1"), X(2)),
+            Instruction::SetVariable(X(5)),
+            Instruction::PutStructure(Functor::from("a/0"), X(7)),
+            Instruction::PutStructure(Functor::from("f/1"), X(6)),
+            Instruction::SetValue(X(7)),
+            Instruction::PutStructure(Functor::from("h/2"), X(3)),
+            Instruction::SetVariable(X(4)),
+            Instruction::SetValue(X(6)),
+            Instruction::PutStructure(Functor::from("p/3"), X(1)),
+            Instruction::SetValue(X(2)),
+            Instruction::SetValue(X(3)),
+            Instruction::SetValue(X(4))
         ];
 
         let expected_program_instructions = vec![
-            Instruction::GetStructure(Functor::from("p/3"), 1),
-            Instruction::UnifyVariable(2),
-            Instruction::UnifyVariable(3),
-            Instruction::UnifyVariable(4),
-            Instruction::GetStructure(Functor::from("h/2"), 3),
-            Instruction::UnifyValue(2),
-            Instruction::UnifyVariable(5),
-            Instruction::GetStructure(Functor::from("f/1"), 4),
-            Instruction::UnifyValue(5)
+            Instruction::GetStructure(Functor::from("p/3"), X(1)),
+            Instruction::UnifyVariable(X(2)),
+            Instruction::UnifyVariable(X(3)),
+            Instruction::UnifyVariable(X(4)),
+            Instruction::GetStructure(Functor::from("h/2"), X(3)),
+            Instruction::UnifyValue(X(2)),
+            Instruction::UnifyVariable(X(5)),
+            Instruction::GetStructure(Functor::from("f/1"), X(4)),
+            Instruction::UnifyValue(X(5))
         ];
 
         let mut q = e.parse("p(f(X), h(Y, f(a)), Y).").unwrap();
@@ -1420,12 +1455,12 @@ mod tests {
         let mut m = Machine::new();
 
 
-        m.put_variable(4, 1);
-        m.put_structure(Functor::from("h/2"), 2);
-        m.set_value(4);
-        m.set_variable(5);
-        m.put_structure(Functor::from("f/1"), 3);
-        m.set_value(5);
+        m.put_variable(X(4), X(1));
+        m.put_structure(Functor::from("h/2"), X(2));
+        m.set_value(X(4));
+        m.set_variable(X(5));
+        m.put_structure(Functor::from("f/1"), X(3));
+        m.set_value(X(5));
 //        m.call(Functor::from("p/3"));
 
         let expected_heap_cells = vec![
@@ -1447,23 +1482,23 @@ mod tests {
     fn test_exercise_2_7() {
         let mut m = Machine::new();
 
-        m.put_variable(4, 1);
-        m.put_structure(Functor::from("h/2"), 2);
-        m.set_value(4);
-        m.set_variable(5);
-        m.put_structure(Functor::from("f/1"), 3);
-        m.set_value(5);
+        m.put_variable(X(4), X(1));
+        m.put_structure(Functor::from("h/2"), X(2));
+        m.set_value(X(4));
+        m.set_variable(X(5));
+        m.put_structure(Functor::from("f/1"), X(3));
+        m.set_value(X(5));
 //        m.call(Functor::from("p/3"));
 
-        m.get_structure(Functor::from("f/1"), 1);
-        m.unify_variable(4);
-        m.get_structure(Functor::from("h/2"), 2);
-        m.unify_variable(5);
-        m.unify_variable(6);
-        m.get_value(5, 3);
-        m.get_structure(Functor::from("f/1"), 6);
-        m.unify_variable(7);
-        m.get_structure(Functor::from("a/0"), 7);
+        m.get_structure(Functor::from("f/1"), X(1));
+        m.unify_variable(X(4));
+        m.get_structure(Functor::from("h/2"), X(2));
+        m.unify_variable(X(5));
+        m.unify_variable(X(6));
+        m.get_value(X(5), X(3));
+        m.get_structure(Functor::from("f/1"), X(6));
+        m.unify_variable(X(7));
+        m.get_structure(Functor::from("a/0"), X(7));
         m.proceed();
 
         let expected_heap_cells = vec![
@@ -1490,13 +1525,13 @@ mod tests {
         assert_eq!(heap_cells, &expected_heap_cells);
 
 
-        register_is(&m, 1, Ref(0));
-        register_is(&m, 2, Str(2));
-        register_is(&m, 3, Str(6));
-        register_is(&m, 4, Ref(10));
-        register_is(&m, 5, Ref(0));
-        register_is(&m, 6, Ref(4));
-        register_is(&m, 7, Ref(13));
+        register_is(&m, X(1), Ref(0));
+        register_is(&m, X(2), Str(2));
+        register_is(&m, X(3), Str(6));
+        register_is(&m, X(4), Ref(10));
+        register_is(&m, X(5), Ref(0));
+        register_is(&m, X(6), Ref(4));
+        register_is(&m, X(7), Ref(13));
     }
 
     #[test]
@@ -1552,25 +1587,25 @@ mod tests {
         };
 
         let expected_query_instructions = vec![
-            Instruction::PutStructure(Functor::from("f/1"), 1),
-            Instruction::SetVariable(4),
-            Instruction::PutStructure(Functor::from("a/0"), 7),
-            Instruction::PutStructure(Functor::from("f/1"), 6),
-            Instruction::SetValue(7),
-            Instruction::PutStructure(Functor::from("h/2"), 2),
-            Instruction::SetVariable(5),
-            Instruction::SetValue(6),
-            Instruction::PutValue(5, 3),
+            Instruction::PutStructure(Functor::from("f/1"), X(1)),
+            Instruction::SetVariable(X(4)),
+            Instruction::PutStructure(Functor::from("a/0"), X(7)),
+            Instruction::PutStructure(Functor::from("f/1"), X(6)),
+            Instruction::SetValue(X(7)),
+            Instruction::PutStructure(Functor::from("h/2"), X(2)),
+            Instruction::SetVariable(X(5)),
+            Instruction::SetValue(X(6)),
+            Instruction::PutValue(X(5), X(3)),
             Instruction::Call(Functor::from("p/3"))
         ];
 
         let expected_program_instructions = vec![
-            Instruction::GetVariable(4, 1),
-            Instruction::GetStructure(Functor::from("h/2"), 2),
-            Instruction::UnifyValue(4),
-            Instruction::UnifyVariable(5),
-            Instruction::GetStructure(Functor::from("f/1"), 3),
-            Instruction::UnifyValue(5),
+            Instruction::GetVariable(X(4), X(1)),
+            Instruction::GetStructure(Functor::from("h/2"), X(2)),
+            Instruction::UnifyValue(X(4)),
+            Instruction::UnifyVariable(X(5)),
+            Instruction::GetStructure(Functor::from("f/1"), X(3)),
+            Instruction::UnifyValue(X(5)),
             Instruction::Proceed
         ];
 
@@ -1616,12 +1651,12 @@ mod tests {
         };
 
         let expected_query_instructions = vec![
-            Instruction::PutVariable(4, 1),
-            Instruction::PutStructure(Functor::from("h/2"), 2),
-            Instruction::SetValue(4),
-            Instruction::SetVariable(5),
-            Instruction::PutStructure(Functor::from("f/1"), 3),
-            Instruction::SetValue(5),
+            Instruction::PutVariable(X(4), X(1)),
+            Instruction::PutStructure(Functor::from("h/2"), X(2)),
+            Instruction::SetValue(X(4)),
+            Instruction::SetVariable(X(5)),
+            Instruction::PutStructure(Functor::from("f/1"), X(3)),
+            Instruction::SetValue(X(5)),
             Instruction::Call(Functor::from("p/3"))
         ];
 
@@ -1700,15 +1735,15 @@ mod tests {
         };
 
         let expected_program_instructions = vec![
-            Instruction::GetStructure(Functor::from("f/1"), 1),
-            Instruction::UnifyVariable(4),
-            Instruction::GetStructure(Functor::from("h/2"), 2),
-            Instruction::UnifyVariable(5),
-            Instruction::UnifyVariable(6),
-            Instruction::GetValue(5, 3),
-            Instruction::GetStructure(Functor::from("f/1"), 6),
-            Instruction::UnifyVariable(7),
-            Instruction::GetStructure(Functor::from("a/0"), 7),
+            Instruction::GetStructure(Functor::from("f/1"), X(1)),
+            Instruction::UnifyVariable(X(4)),
+            Instruction::GetStructure(Functor::from("h/2"), X(2)),
+            Instruction::UnifyVariable(X(5)),
+            Instruction::UnifyVariable(X(6)),
+            Instruction::GetValue(X(5), X(3)),
+            Instruction::GetStructure(Functor::from("f/1"), X(6)),
+            Instruction::UnifyVariable(X(7)),
+            Instruction::GetStructure(Functor::from("a/0"), X(7)),
             Instruction::Proceed
         ];
 
@@ -1725,7 +1760,7 @@ mod tests {
 
         m.set_mode(Read);
         m.push_heap(Ref(3));
-        m.unify_variable(1);
+        m.unify_variable(X(1));
 
         assert_eq!(m.get_x(1).cloned().unwrap(), Ref(3));
         assert_eq!(m.get_s(), 1);
@@ -1736,7 +1771,7 @@ mod tests {
         let mut m = Machine::new();
 
         m.set_mode(Write);
-        m.unify_variable(1);
+        m.unify_variable(X(1));
 
         assert_eq!(m.heap[0], Ref(0));
         assert_eq!(m.get_x(1).cloned().unwrap(), Ref(0));
@@ -1840,15 +1875,15 @@ mod tests {
         let e = parser::ExpressionParser::new();
 
         let expected_instructions = vec![
-            Instruction::PutStructure(Functor::from("h/2"), 3),
-            Instruction::SetVariable(2),
-            Instruction::SetVariable(5),
-            Instruction::PutStructure(Functor::from("f/1"), 4),
-            Instruction::SetValue(5),
-            Instruction::PutStructure(Functor::from("p/3"), 1),
-            Instruction::SetValue(2),
-            Instruction::SetValue(3),
-            Instruction::SetValue(4)
+            Instruction::PutStructure(Functor::from("h/2"), X(3)),
+            Instruction::SetVariable(X(2)),
+            Instruction::SetVariable(X(5)),
+            Instruction::PutStructure(Functor::from("f/1"), X(4)),
+            Instruction::SetValue(X(5)),
+            Instruction::PutStructure(Functor::from("p/3"), X(1)),
+            Instruction::SetValue(X(2)),
+            Instruction::SetValue(X(3)),
+            Instruction::SetValue(X(4))
         ];
 
         let mut q = e.parse("p(Z, h(Z, W), f(W)).").unwrap();
@@ -1860,6 +1895,6 @@ mod tests {
     }
 
     fn register_is(machine: &Machine, register: Register, cell: Cell) {
-        assert_eq!(machine.get_x(register).cloned().unwrap(), cell);
+        assert_eq!(machine.get_register(register).cloned().unwrap(), cell);
     }
 }

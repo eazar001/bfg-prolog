@@ -7,6 +7,6 @@ Progress
 --------
 - [x] L0 - Basic unification over query terms and program facts
 - [x] L1 - L0 extended with support for invoking predicate names as procedures
-- [ ] L2 - Flat resolution of programs that support rules, with no backtracking
+- [ ] L2 - Flat resolution of programs that support rules, with no backtracking (90% complete)
 - [ ] L3 - Prolog
 - [ ] Final pass - An optimized WAM architecture

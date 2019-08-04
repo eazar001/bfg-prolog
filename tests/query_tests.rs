@@ -1,6 +1,7 @@
 use bfg_prolog::{query, Machine, Cell, Register, run_query};
 use bfg_prolog::Store::*;
 use bfg_prolog::Cell::{Str, Ref};
+use bfg_prolog::Register::*;
 
 
 // TODO: integration tests need to be updated to reflect the transgressions to L2
@@ -60,10 +61,10 @@ fn test_query_execution_exercise_2_2() {
 
     assert_eq!(&expected_heap_cells, m.get_heap());
 
-    register_is(&m, 1, Str(13));
-    register_is(&m, 2, Str(11));
-    register_is(&m, 3, Ref(15));
-    register_is(&m, 4, Str(1));
+    register_is(&m, X(1), Str(13));
+    register_is(&m, X(2), Str(11));
+    register_is(&m, X(3), Ref(15));
+    register_is(&m, X(4), Str(1));
 
     m.unify(HeapAddr(6), HeapAddr(12));
 
@@ -116,5 +117,5 @@ fn test_query_execution_2_5() {
 }
 
 fn register_is(machine: &Machine, register: Register, cell: Cell) {
-    assert_eq!(machine.get_x(register).cloned().unwrap(), cell);
+    assert_eq!(machine.get_register(register).cloned().unwrap(), cell);
 }
