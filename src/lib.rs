@@ -90,6 +90,13 @@ struct Code {
     code_address: HashMap<Functor, usize>
 }
 
+// Environment stack frames
+#[derive(Debug, Clone, Eq, PartialEq)]
+enum Frame {
+    Code(Address),
+    Cell(Cell)
+}
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 struct Registers {
     // the "h" counter contains the location of the next cell to be pushed onto the heap
@@ -112,7 +119,7 @@ pub struct Machine {
     // the "push-down-list" contains StoreAddresses and serves as a unification stack
     pdl: Vec<Store>,
     code: Code,
-    stack: Vec<usize>,
+    stack: Vec<Option<Frame>>,
     registers: Registers,
     mode: Mode,
     fail: bool,
@@ -194,11 +201,9 @@ impl Machine {
 
     fn push_instruction(&mut self, instruction: Instruction) {
         self.code.code_area.push(instruction);
-        let ia = self.get_p();
-        self.set_p(ia + 1);
     }
 
-    fn push_instructions(&mut self, fact: &Functor, instructions: &Instructions) {
+    fn push_instructions(&mut self, fact: &Functor, instructions: &[Instruction]) {
         self.push_code_address(fact);
         for instruction in instructions {
             self.push_instruction(instruction.clone());
@@ -210,6 +215,7 @@ impl Machine {
         let instructions = self.get_code().clone();
 
         while a < instructions.len() {
+            println!("{:?}", instructions[a]);
             match &instructions[a] {
                 instruction@Instruction::Proceed | instruction@Instruction::Call(_) => {
                     self.execute(instruction);
@@ -248,21 +254,38 @@ impl Machine {
     }
 
     pub fn allocate(&mut self, n: usize) {
-        let stack = &self.stack;
         let e = self.get_e();
-        let new_e = e + stack[e+2] + 3;
+        self.stack.resize(e+n+5, None);
+        self.stack[e+2] = Some(Frame::Code(n));
+        let temp = match &self.stack[e+2] {
+            Some(Frame::Code(a)) => a,
+            _ => panic!("address retrieval error")
+        };
 
-        self.stack[new_e] = e;
-        self.stack[new_e+1] = self.get_cp();
-        self.stack[new_e+2] = n;
+        let new_e = e + temp + 3;
+
+        self.stack[new_e] = Some(Frame::Code(e));
+        self.stack[new_e+1] = Some(Frame::Code(self.get_cp()));
         self.set_e(new_e);
         self.set_p(self.get_p() + 1);
+
+        println!("{:?}", self.stack);
+        println!("{:?}", self.code.code_address);
+        println!("{:?}", self.code.code_area);
     }
 
     pub fn deallocate(&mut self) {
         let stack = &self.stack;
         let e = self.get_e();
-        let (new_p, new_e) = (stack[e+1], stack[e]);
+        let new_p = match &stack[e+1] {
+            Some(Frame::Code(a)) => *a,
+            _ => panic!("address retrieval error")
+        };
+
+        let new_e = match &stack[e] {
+            Some(Frame::Code(a)) => *a,
+            _ => panic!("address retrieval error")
+        };
 
         self.set_p(new_p);
         self.set_e(new_e);
@@ -287,7 +310,7 @@ impl Machine {
     pub fn get_register(&self, register: Register) -> Option<&Cell> {
         match register {
             Register::X(xi) => self.get_x(xi),
-            _ => None
+            Register::Y(yi) => self.get_y(yi)
         }
     }
 
@@ -295,11 +318,27 @@ impl Machine {
         self.get_x_registers()[xi-1].as_ref()
     }
 
+    pub fn get_y(&self, yi: usize) -> Option<&Cell> {
+        let offset = self.get_e() + 3;
+        let stack = &self.stack;
+
+        match &stack[offset+yi] {
+            Some(Frame::Cell(c)) => Some(c),
+            _ => panic!("error retrieving cell-data from permanent register")
+        }
+    }
+
     fn insert_register(&mut self, register: Register, cell: Cell) {
         match register {
             Register::X(xi) => self.insert_x(xi, cell),
-            _ => ()
+            Register::Y(yi) => self.insert_y(yi, cell)
         }
+    }
+
+    fn insert_y(&mut self, yi: usize, cell: Cell) {
+        let offset = self.get_e() + 3;
+        let stack = &self.stack;
+        self.stack[offset+yi] = Some(Frame::Cell(cell));
     }
 
     fn insert_x(&mut self, xi: usize, cell: Cell) {
@@ -1695,10 +1734,25 @@ mod tests {
             ]
         };
 
+        let expected_instructions = vec![
+            Instruction::Allocate(2),
+            Instruction::GetVariable(X(3), X(1)),
+            Instruction::GetVariable(Y(1), X(2)),
+            Instruction::PutValue(X(3), X(1)),
+            Instruction::PutVariable(Y(2), X(2)),
+            Instruction::Call(Functor::from("q/2")),
+            Instruction::PutValue(Y(2), X(1)),
+            Instruction::PutValue(Y(1), X(2)),
+            Instruction::Call(Functor::from("r/2")),
+            Instruction::Deallocate
+        ];
+
         let mut m = TermMap::new();
         let mut seen = TermSet::new();
 
-        compile_rule(&r, &mut m, &mut seen);
+        let instructions = compile_rule(&r, &mut m, &mut seen);
+
+        assert_eq!(&expected_instructions, &instructions);
     }
 
     #[test]
