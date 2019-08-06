@@ -1707,6 +1707,49 @@ mod tests {
     }
 
     #[test]
+    fn test_fact_instruction_compilation_exercise_3_1() {
+        let f1 = Term::Compound(Compound {
+            name: "q".to_string(),
+            arity: 2,
+            args: vec![
+                Term::Atom(Atom("a".to_string())),
+                Term::Atom(Atom("b".to_string()))
+            ]});
+
+        let f2 = Term::Compound(Compound {
+            name: "r".to_string(),
+            arity: 2,
+            args: vec![
+                Term::Atom(Atom("b".to_string())),
+                Term::Atom(Atom("c".to_string()))
+            ]});
+
+        let expected_instructions = vec![
+            Instruction::GetStructure(Functor::from("a/0"), X(1)),
+            Instruction::GetStructure(Functor::from("b/0"), X(2)),
+            Instruction::Proceed
+        ];
+
+        let mut m = HashMap::new();
+        let mut seen= HashSet::new();
+        let instructions = compile_fact(&f1, &mut m, &mut seen);
+
+        assert_eq!(&expected_instructions, &instructions);
+
+        let expected_instructions = vec![
+            Instruction::GetStructure(Functor::from("b/0"), X(1)),
+            Instruction::GetStructure(Functor::from("c/0"), X(2)),
+            Instruction::Proceed
+        ];
+
+        let mut m = HashMap::new();
+        let mut seen= HashSet::new();
+        let instructions = compile_fact(&f2, &mut m, &mut seen);
+
+        assert_eq!(&expected_instructions, &instructions);
+    }
+
+    #[test]
     fn test_instruction_compilation_figure_3_1() {
         let r = Rule {
             head: Compound {
