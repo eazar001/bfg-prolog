@@ -1693,7 +1693,59 @@ mod tests {
         assert_eq!(&expected_query_instructions, &query_instructions);
     }
 
-    // FIXME: this test is wrong, make sure proper registers are added
+    #[test]
+    fn test_instruction_compilation_figure_2_10() {
+        let q = Compound {
+            name: "p".to_string(),
+            arity: 3,
+            args: vec![
+                Term::Compound(
+                    Compound {
+                        name: "f".to_string(),
+                        arity: 1,
+                        args: vec![Term::Var(Var("X".to_string()))]
+                    }
+                ),
+                Term::Compound(
+                    Compound {
+                        name: "h".to_string(),
+                        arity: 2,
+                        args: vec![
+                            Term::Var(Var("Y".to_string())),
+                            Term::Compound(
+                                Compound {
+                                    name: "f".to_string(),
+                                    arity: 1,
+                                    args: vec![Term::Atom(Atom("a".to_string()))]
+                                }
+                            ),
+                        ]
+                    }
+                ),
+                Term::Var(Var("Y".to_string()))
+            ]
+        };
+
+        let expected_program_instructions = vec![
+            Instruction::GetStructure(Functor::from("f/1"), X(1)),
+            Instruction::UnifyVariable(X(4)),
+            Instruction::GetStructure(Functor::from("h/2"), X(2)),
+            Instruction::UnifyVariable(X(5)),
+            Instruction::UnifyVariable(X(6)),
+            Instruction::GetValue(X(5), X(3)),
+            Instruction::GetStructure(Functor::from("f/1"), X(6)),
+            Instruction::UnifyVariable(X(7)),
+            Instruction::GetStructure(Functor::from("a/0"), X(7)),
+            Instruction::Proceed
+        ];
+
+        let mut seen = HashSet::new();
+        let mut map = HashMap::new();
+        let program_instructions = compile_fact(&q, &mut map, &mut seen);
+
+        assert_eq!(&expected_program_instructions, &program_instructions);
+    }
+
     #[test]
     fn test_fact_instruction_compilation_exercise_3_1() {
         let f1 = Term::Compound(Compound {
@@ -1782,59 +1834,6 @@ mod tests {
         let instructions = compile_rule(&r, &mut m, &mut seen);
 
         assert_eq!(&expected_instructions, &instructions);
-    }
-
-    #[test]
-    fn test_instruction_compilation_figure_2_10() {
-        let q = Compound {
-            name: "p".to_string(),
-            arity: 3,
-            args: vec![
-                Term::Compound(
-                    Compound {
-                        name: "f".to_string(),
-                        arity: 1,
-                        args: vec![Term::Var(Var("X".to_string()))]
-                    }
-                ),
-                Term::Compound(
-                    Compound {
-                        name: "h".to_string(),
-                        arity: 2,
-                        args: vec![
-                            Term::Var(Var("Y".to_string())),
-                            Term::Compound(
-                                Compound {
-                                    name: "f".to_string(),
-                                    arity: 1,
-                                    args: vec![Term::Atom(Atom("a".to_string()))]
-                                }
-                            ),
-                        ]
-                    }
-                ),
-                Term::Var(Var("Y".to_string()))
-            ]
-        };
-
-        let expected_program_instructions = vec![
-            Instruction::GetStructure(Functor::from("f/1"), X(1)),
-            Instruction::UnifyVariable(X(4)),
-            Instruction::GetStructure(Functor::from("h/2"), X(2)),
-            Instruction::UnifyVariable(X(5)),
-            Instruction::UnifyVariable(X(6)),
-            Instruction::GetValue(X(5), X(3)),
-            Instruction::GetStructure(Functor::from("f/1"), X(6)),
-            Instruction::UnifyVariable(X(7)),
-            Instruction::GetStructure(Functor::from("a/0"), X(7)),
-            Instruction::Proceed
-        ];
-
-        let mut seen = HashSet::new();
-        let mut map = HashMap::new();
-        let program_instructions = compile_fact(&q, &mut map, &mut seen);
-
-        assert_eq!(&expected_program_instructions, &program_instructions);
     }
 
     #[test]
