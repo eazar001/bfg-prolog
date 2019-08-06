@@ -1706,6 +1706,7 @@ mod tests {
         assert_eq!(&expected_query_instructions, &query_instructions);
     }
 
+    // FIXME: this test is wrong, make sure proper registers are added
     #[test]
     fn test_fact_instruction_compilation_exercise_3_1() {
         let f1 = Term::Compound(Compound {
@@ -1742,8 +1743,6 @@ mod tests {
             Instruction::Proceed
         ];
 
-        let mut m = HashMap::new();
-        let mut seen= HashSet::new();
         let instructions = compile_fact(&f2, &mut m, &mut seen);
 
         assert_eq!(&expected_instructions, &instructions);
