@@ -1187,8 +1187,6 @@ pub fn resolve_term(m: &Machine, addr: HeapAddress, display_map: &[(Cell, Term)]
 }
 
 
-// TODO: unit tests need to be updated to reflect the transgressions to L2
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1390,21 +1388,18 @@ mod tests {
         register_is(&m, X(7), Ref(17));
     }
 
-    #[ignore]
     #[test]
     fn test_program_instruction_compilation_fig_2_3() {
         let e = parser::ExpressionParser::new();
 
         let expected_instructions = vec![
-            Instruction::PutStructure(Functor::from("h/2"), X(3)),
-            Instruction::SetVariable(X(2)),
+            Instruction::PutVariable(X(4), X(1)),
+            Instruction::PutStructure(Functor::from("h/2"), X(2)),
+            Instruction::SetValue(X(4)),
             Instruction::SetVariable(X(5)),
-            Instruction::PutStructure(Functor::from("f/1"), X(4)),
+            Instruction::PutStructure(Functor::from("f/1"), X(3)),
             Instruction::SetValue(X(5)),
-            Instruction::PutStructure(Functor::from("p/3"), X(1)),
-            Instruction::SetValue(X(2)),
-            Instruction::SetValue(X(3)),
-            Instruction::SetValue(X(4))
+            Instruction::Call(Functor::from("p/3"))
         ];
 
         let mut p = e.parse("p(Z, h(Z, W), f(W)).").unwrap();
@@ -1412,27 +1407,24 @@ mod tests {
         let mut seen = HashSet::new();
         let instructions = compile_query(&p, &mut map, &mut seen);
 
-        assert_eq!(instructions, expected_instructions);
+        assert_eq!(expected_instructions, instructions);
     }
 
-    #[ignore]
     #[test]
     fn test_program_instruction_compilation_fig_2_4() {
         let e = parser::ExpressionParser::new();
 
         let expected_instructions = vec![
-            Instruction::GetStructure(Functor::from("p/3"), X(1)),
-            Instruction::UnifyVariable(X(2)),
-            Instruction::UnifyVariable(X(3)),
+            Instruction::GetStructure(Functor::from("f/1"), X(1)),
             Instruction::UnifyVariable(X(4)),
-            Instruction::GetStructure(Functor::from("f/1"), X(2)),
+            Instruction::GetStructure(Functor::from("h/2"), X(2)),
             Instruction::UnifyVariable(X(5)),
-            Instruction::GetStructure(Functor::from("h/2"), X(3)),
-            Instruction::UnifyValue(X(4)),
             Instruction::UnifyVariable(X(6)),
+            Instruction::GetValue(X(5), X(3)),
             Instruction::GetStructure(Functor::from("f/1"), X(6)),
             Instruction::UnifyVariable(X(7)),
-            Instruction::GetStructure(Functor::from("a/0"), X(7))
+            Instruction::GetStructure(Functor::from("a/0"), X(7)),
+            Instruction::Proceed
         ];
 
         let mut p = e.parse("p(f(X), h(Y, f(a)), Y).").unwrap();
@@ -1440,39 +1432,34 @@ mod tests {
         let mut map = HashMap::new();
         let instructions = compile_fact(&p, &mut map, &mut seen);
 
-        assert_eq!(instructions, expected_instructions);
+        assert_eq!(expected_instructions, instructions);
     }
 
-    #[ignore]
     #[test]
     fn test_instruction_compilation_exercise_2_4() {
         let e = parser::ExpressionParser::new();
 
         let expected_query_instructions = vec![
-            Instruction::PutStructure(Functor::from("f/1"), X(2)),
-            Instruction::SetVariable(X(5)),
+            Instruction::PutStructure(Functor::from("f/1"), X(1)),
+            Instruction::SetVariable(X(4)),
             Instruction::PutStructure(Functor::from("a/0"), X(7)),
             Instruction::PutStructure(Functor::from("f/1"), X(6)),
             Instruction::SetValue(X(7)),
-            Instruction::PutStructure(Functor::from("h/2"), X(3)),
-            Instruction::SetVariable(X(4)),
+            Instruction::PutStructure(Functor::from("h/2"), X(2)),
+            Instruction::SetVariable(X(5)),
             Instruction::SetValue(X(6)),
-            Instruction::PutStructure(Functor::from("p/3"), X(1)),
-            Instruction::SetValue(X(2)),
-            Instruction::SetValue(X(3)),
-            Instruction::SetValue(X(4))
+            Instruction::PutValue(X(5), X(3)),
+            Instruction::Call(Functor::from("p/3"))
         ];
 
         let expected_program_instructions = vec![
-            Instruction::GetStructure(Functor::from("p/3"), X(1)),
-            Instruction::UnifyVariable(X(2)),
-            Instruction::UnifyVariable(X(3)),
-            Instruction::UnifyVariable(X(4)),
-            Instruction::GetStructure(Functor::from("h/2"), X(3)),
-            Instruction::UnifyValue(X(2)),
+            Instruction::GetVariable(X(4), X(1)),
+            Instruction::GetStructure(Functor::from("h/2"), X(2)),
+            Instruction::UnifyValue(X(4)),
             Instruction::UnifyVariable(X(5)),
-            Instruction::GetStructure(Functor::from("f/1"), X(4)),
-            Instruction::UnifyValue(X(5))
+            Instruction::GetStructure(Functor::from("f/1"), X(3)),
+            Instruction::UnifyValue(X(5)),
+            Instruction::Proceed
         ];
 
         let mut q = e.parse("p(f(X), h(Y, f(a)), Y).").unwrap();
@@ -1965,21 +1952,18 @@ mod tests {
         assert!(e.parse("foo.").is_ok());
     }
 
-    #[ignore]
     #[test]
     fn test_instruction_compilation_exercise_2_1() {
         let e = parser::ExpressionParser::new();
 
         let expected_instructions = vec![
-            Instruction::PutStructure(Functor::from("h/2"), X(3)),
-            Instruction::SetVariable(X(2)),
+            Instruction::PutVariable(X(4), X(1)),
+            Instruction::PutStructure(Functor::from("h/2"), X(2)),
+            Instruction::SetValue(X(4)),
             Instruction::SetVariable(X(5)),
-            Instruction::PutStructure(Functor::from("f/1"), X(4)),
+            Instruction::PutStructure(Functor::from("f/1"), X(3)),
             Instruction::SetValue(X(5)),
-            Instruction::PutStructure(Functor::from("p/3"), X(1)),
-            Instruction::SetValue(X(2)),
-            Instruction::SetValue(X(3)),
-            Instruction::SetValue(X(4))
+            Instruction::Call(Functor::from("p/3"))
         ];
 
         let mut q = e.parse("p(Z, h(Z, W), f(W)).").unwrap();
@@ -1987,7 +1971,7 @@ mod tests {
         let mut map = HashMap::new();
         let instructions = compile_query(&q, &mut map, &mut seen);
 
-        assert_eq!(instructions, expected_instructions);
+        assert_eq!(expected_instructions, instructions);
     }
 
     fn register_is(machine: &Machine, register: Register, cell: Cell) {
