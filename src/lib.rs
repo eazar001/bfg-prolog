@@ -215,7 +215,6 @@ impl Machine {
         let instructions = self.get_code().clone();
 
         while a < instructions.len() {
-            println!("{:?}", instructions[a]);
             match &instructions[a] {
                 instruction@Instruction::Proceed | instruction@Instruction::Call(_) => {
                     self.execute(instruction);
@@ -268,10 +267,6 @@ impl Machine {
         self.stack[new_e+1] = Some(Frame::Code(self.get_cp()));
         self.set_e(new_e);
         self.set_p(self.get_p() + 1);
-
-        println!("{:?}", self.stack);
-        println!("{:?}", self.code.code_address);
-        println!("{:?}", self.code.code_area);
     }
 
     pub fn deallocate(&mut self) {
@@ -1017,8 +1012,6 @@ fn compile_rule(rule: &Rule, m: &mut TermMap, seen: &mut TermSet) -> Instruction
     head_instructions.extend(body_instructions);
     let instructions = head_instructions;
 
-    println!("{:?}", instructions);
-
     instructions
 }
 
@@ -1249,7 +1242,6 @@ mod tests {
 
         let heap_cells = &m.heap;
 
-        println!("{:?}", m.get_x_registers());
         assert_eq!(heap_cells, &expected_heap_cells);
         register_is(&m, X(1), Str(1));
         register_is(&m, X(2), Ref(2));

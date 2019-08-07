@@ -6,8 +6,12 @@ lalrpop_mod!(pub parser);
 
 fn main() {
     let mut m = Machine::new();
+    let mut bindings = Vec::new();
 
-    let (bindings, _) = run_query(&mut m, "p(f(X), h(Y, f(a)), Y).", "p(Z, h(Z, W), f(W)).");
+    let (query_bindings, program_bindings) = run_query(&mut m, "p(f(X), h(Y, f(a)), Y).", "p(Z, h(Z, W), f(W)).");
+
+    bindings.extend_from_slice(&query_bindings);
+    bindings.extend_from_slice(&program_bindings);
 
     for answer in bindings {
         println!("{}", answer);
