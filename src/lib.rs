@@ -1748,7 +1748,7 @@ mod tests {
 
     #[test]
     fn test_fact_instruction_compilation_exercise_3_1() {
-        let f1 = Term::Compound(Compound {
+        let fact1 = Term::Compound(Compound {
             name: "q".to_string(),
             arity: 2,
             args: vec![
@@ -1756,7 +1756,7 @@ mod tests {
                 Term::Atom(Atom("b".to_string()))
             ]});
 
-        let f2 = Term::Compound(Compound {
+        let fact2 = Term::Compound(Compound {
             name: "r".to_string(),
             arity: 2,
             args: vec![
@@ -1764,31 +1764,6 @@ mod tests {
                 Term::Atom(Atom("c".to_string()))
             ]});
 
-        let expected_instructions = vec![
-            Instruction::GetStructure(Functor::from("a/0"), X(1)),
-            Instruction::GetStructure(Functor::from("b/0"), X(2)),
-            Instruction::Proceed
-        ];
-
-        let mut m = HashMap::new();
-        let mut seen= HashSet::new();
-        let instructions = compile_fact(&f1, &mut m, &mut seen);
-
-        assert_eq!(&expected_instructions, &instructions);
-
-        let expected_instructions = vec![
-            Instruction::GetStructure(Functor::from("b/0"), X(1)),
-            Instruction::GetStructure(Functor::from("c/0"), X(2)),
-            Instruction::Proceed
-        ];
-
-        let instructions = compile_fact(&f2, &mut m, &mut seen);
-
-        assert_eq!(&expected_instructions, &instructions);
-    }
-
-    #[test]
-    fn test_instruction_compilation_figure_3_1() {
         let r = Rule {
             head: Compound {
                 name: "p".to_string(),
@@ -1815,7 +1790,19 @@ mod tests {
             ]
         };
 
-        let expected_instructions = vec![
+        let expected_fact1_instructions = vec![
+            Instruction::GetStructure(Functor::from("a/0"), X(1)),
+            Instruction::GetStructure(Functor::from("b/0"), X(2)),
+            Instruction::Proceed
+        ];
+
+        let expected_fact2_instructions = vec![
+            Instruction::GetStructure(Functor::from("b/0"), X(1)),
+            Instruction::GetStructure(Functor::from("c/0"), X(2)),
+            Instruction::Proceed
+        ];
+
+        let expected_rule_instructions = vec![
             Instruction::Allocate(2),
             Instruction::GetVariable(X(3), X(1)),
             Instruction::GetVariable(Y(1), X(2)),
@@ -1828,12 +1815,16 @@ mod tests {
             Instruction::Deallocate
         ];
 
-        let mut m = TermMap::new();
-        let mut seen = TermSet::new();
+        let mut m = HashMap::new();
+        let mut seen= HashSet::new();
 
-        let instructions = compile_rule(&r, &mut m, &mut seen);
+        let rule_instructions = compile_rule(&r, &mut m, &mut seen);
+        let fact1_instructions = compile_fact(&fact1, &mut m, &mut seen);
+        let fact2_instructions = compile_fact(&fact2, &mut m, &mut seen);
 
-        assert_eq!(&expected_instructions, &instructions);
+        assert_eq!(&expected_fact1_instructions, &fact1_instructions);
+        assert_eq!(&expected_fact2_instructions, &fact2_instructions);
+        assert_eq!(&expected_rule_instructions, &rule_instructions);
     }
 
     #[test]
