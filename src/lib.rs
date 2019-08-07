@@ -337,7 +337,6 @@ impl Machine {
 
     fn insert_y(&mut self, yi: usize, cell: Cell) {
         let offset = self.get_e() + 3;
-        let stack = &self.stack;
         self.stack[offset+yi] = Some(Frame::Cell(cell));
     }
 
@@ -1821,10 +1820,27 @@ mod tests {
         let rule_instructions = compile_rule(&r, &mut m, &mut seen);
         let fact1_instructions = compile_fact(&fact1, &mut m, &mut seen);
         let fact2_instructions = compile_fact(&fact2, &mut m, &mut seen);
+        let r_functor = Functor::from("p/2");
+        let f1_functor = Functor::from("q/2");
+        let f2_functor = Functor::from("r/2");
 
         assert_eq!(&expected_fact1_instructions, &fact1_instructions);
         assert_eq!(&expected_fact2_instructions, &fact2_instructions);
         assert_eq!(&expected_rule_instructions, &rule_instructions);
+
+        let mut machine = Machine::new();
+
+
+        machine.push_instructions(&r_functor, &rule_instructions);
+        machine.push_instructions(&f1_functor, &fact1_instructions);
+        machine.push_instructions(&f2_functor, &fact2_instructions);
+        let results = query(&mut machine, "p(U, V).");
+        machine.execute_instructions(&r_functor);
+        machine.execute_instructions(&f1_functor);
+        machine.execute_instructions(&f2_functor);
+
+        println!("{:?}", machine);
+        println!("{:?}", results);
     }
 
     #[test]
