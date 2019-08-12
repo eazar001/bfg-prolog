@@ -167,7 +167,7 @@ impl Machine {
         }
     }
 
-    fn execute(&mut self, instruction: &Instruction) {
+    fn execute_instruction(&mut self, instruction: &Instruction) {
         match instruction {
             Instruction::PutStructure(f, x) => self.put_structure(f.clone(), *x),
             Instruction::GetStructure(f, x) => self.get_structure(f.clone(), *x),
@@ -186,6 +186,12 @@ impl Machine {
         }
     }
 
+    fn execute(&mut self, instructions: &[Instruction]) {
+        for instruction in instructions {
+            self.execute_instruction(instruction)
+        }
+    }
+
     fn push_instruction(&mut self, instruction: Instruction) {
         self.code.code_area.push(instruction);
     }
@@ -194,23 +200,6 @@ impl Machine {
         self.push_code_address(fact);
         for instruction in instructions {
             self.push_instruction(instruction.clone());
-        }
-    }
-
-    fn execute_instructions(&mut self, fact: &Functor) {
-        let mut a = self.get_code_address(fact);
-        let instructions = self.get_code().clone();
-
-        while a < instructions.len() {
-            match &instructions[a] {
-                instruction @ Instruction::Proceed | instruction @ Instruction::Call(_) => {
-                    self.execute(instruction);
-                    break;
-                }
-                instruction => self.execute(instruction),
-            }
-
-            a += 1;
         }
     }
 
@@ -448,20 +437,11 @@ impl Machine {
                 if let Func(f) = &self.heap[*addr] {
                     &f
                 } else {
-                    error!("encountered a structure that doesn't point to a functor");
                     panic!("invalid cell: structure cell pointing to non-functor data")
                 }
             }
-            Func(f) => {
-                warn!(
-                    "accessing a functor from a functor-cell, but this normally shouldn't happen"
-                );
-                f
-            }
-            Ref(_) => {
-                error!("tried getting a functor from a ref-cell");
-                panic!("invalid cell-type for functor retrieval used");
-            }
+            Func(f) => panic!("accessing a functor from a functor-cell"),
+            Ref(_) => panic!("invalid cell-type for functor retrieval used"),
         }
     }
 
@@ -852,119 +832,6 @@ fn compile_rule(rule: &Rule, m: &mut TermMap, seen: &mut TermSet) -> Instruction
     head_instructions
 }
 
-pub fn query(m: &mut Machine, q: &str) -> HashMap<Cell, Term> {
-    let e = parser::ExpressionParser::new();
-    let mut query = e.parse(q).unwrap();
-    let mut seen = HashSet::new();
-    let mut map = HashMap::new();
-
-    if let t @ Term::Compound(_) | t @ Term::Atom(_) = &mut query {
-        let instructions = compile_query(t, &mut map, &mut seen);
-        let mut output = HashMap::new();
-
-        {
-            let compound = t.structuralize().unwrap();
-            let name = compound.name;
-            let arity = compound.arity;
-            let query_functor = Functor(name, arity);
-            m.push_instructions(&query_functor, &instructions);
-            m.execute_instructions(&query_functor);
-        }
-
-        for (term, x) in &map {
-            output.insert(m.get_register(*x).cloned().unwrap(), term.clone());
-        }
-
-        output
-    } else {
-        panic!("not supported yet")
-    }
-}
-
-// execute a query against the program term and display the results of the bindings (if any)
-pub fn run_query(m: &mut Machine, q: &str, p: &str) -> (QueryBindings, ProgramBindings) {
-    let query_map = query(m, q);
-    let program_map = program(m, p);
-
-    let mut display_vec = Vec::new();
-    let mut query_bindings = Vec::new();
-    let mut program_bindings = Vec::new();
-
-    display_vec.extend(query_map);
-
-    for (cell, term) in &display_vec {
-        match cell {
-            Cell::Ref(a) | Cell::Str(a) => {
-                if let ast::Term::Var(_) = term {
-                    let mut buffer = String::new();
-                    resolve_term(&m, *a, &display_vec, &mut buffer);
-
-                    if buffer != term.to_string() {
-                        query_bindings.push(format!("{} = {}", term, buffer));
-                    }
-                }
-            }
-            _ => (),
-        }
-    }
-
-    display_vec.extend(program_map);
-
-    for (cell, term) in &display_vec {
-        match cell {
-            Cell::Ref(a) | Cell::Str(a) => {
-                if let ast::Term::Var(_) = term {
-                    let mut buffer = String::new();
-                    resolve_term(&m, *a, &display_vec, &mut buffer);
-
-                    if buffer != term.to_string() {
-                        let program_binding = format!("{} = {}", term, buffer);
-
-                        if !query_bindings.contains(&program_binding) {
-                            program_bindings.push(format!("{} = {}", term, buffer));
-                        }
-                    }
-                }
-            }
-            _ => (),
-        }
-    }
-
-    query_bindings.sort();
-    program_bindings.sort();
-
-    (query_bindings, program_bindings)
-}
-
-pub fn program(m: &mut Machine, p: &str) -> HashMap<Cell, Term> {
-    let e = parser::ExpressionParser::new();
-    let mut program = e.parse(p).unwrap();
-    let mut map = HashMap::new();
-
-    if let t @ Term::Compound(_) | t @ Term::Atom(_) = &mut program {
-        let mut seen = HashSet::new();
-        let instructions = compile_fact(t, &mut map, &mut seen);
-        let mut output = HashMap::new();
-
-        {
-            let compound = t.structuralize().unwrap();
-            let name = compound.name;
-            let arity = compound.arity;
-            let program_functor = Functor(name, arity);
-            m.push_instructions(&program_functor, &instructions);
-            m.execute_instructions(&program_functor);
-        }
-
-        for (term, x) in &map {
-            output.insert(m.get_register(*x).cloned().unwrap(), term.clone());
-        }
-
-        output
-    } else {
-        panic!("not supported yet")
-    }
-}
-
 pub fn resolve_term(
     m: &Machine,
     addr: HeapAddress,
@@ -1020,762 +887,202 @@ pub fn resolve_term(
 mod tests {
     use super::*;
 
-    fn init_test_logger() {
-        env_logger::builder()
-            .is_test(true)
-            .default_format_timestamp(false)
-            .try_init()
-            .unwrap()
-    }
-
-    #[test]
-    fn test_set_variable() {
-        let mut m = Machine::new();
-
-        m.set_variable(X(1));
-
-        let expected_heap_cells = vec![Ref(0)];
-        let heap_cells = &m.heap;
-
-        assert_eq!(heap_cells, &expected_heap_cells);
-        register_is(&m, X(1), Ref(0));
-    }
-
-    #[test]
-    fn test_set_value() {
-        let mut m = Machine::new();
-
-        m.set_variable(X(1));
-        m.set_variable(X(2));
-
-        m.set_value(X(1));
-        m.set_value(X(2));
-
-        let expected_heap_cells = vec![Ref(0), Ref(1), Ref(0), Ref(1)];
-        let heap_cells = &m.heap;
-
-        assert_eq!(heap_cells, &expected_heap_cells);
-        register_is(&m, X(1), Ref(0));
-        register_is(&m, X(2), Ref(1));
-        assert_eq!(m.registers.x.len(), 2);
-    }
-
-    #[test]
-    fn test_put_structure() {
-        let mut m = Machine::new();
-
-        m.put_structure(Functor(String::from("foo"), 2), X(1));
-        m.set_variable(X(2));
-        m.set_variable(X(3));
-        m.set_value(X(2));
-
-        let expected_heap_cells = vec![Str(1), Cell::from("foo/2"), Ref(2), Ref(3), Ref(2)];
-
-        let heap_cells = &m.heap;
-
-        assert_eq!(heap_cells, &expected_heap_cells);
-        register_is(&m, X(1), Str(1));
-        register_is(&m, X(2), Ref(2));
-        register_is(&m, X(3), Ref(3));
-        assert_eq!(m.registers.x.len(), 3);
-    }
-
-    #[test]
-    fn test_deref() {
-        let mut m = Machine::new();
-
-        m.heap = vec![
-            Ref(2),
-            Ref(3),
-            Ref(1),
-            Ref(3),
-            Str(5),
-            Cell::from("f/2"),
-            Ref(3),
-        ];
-
-        m.insert_x(3, Ref(4));
-
-        assert_eq!(m.deref(HeapAddr(0)), HeapAddr(3));
-        assert_eq!(m.deref(HeapAddr(1)), HeapAddr(3));
-        assert_eq!(m.deref(HeapAddr(2)), HeapAddr(3));
-        assert_eq!(m.deref(HeapAddr(3)), HeapAddr(3));
-        assert_eq!(m.deref(HeapAddr(4)), HeapAddr(4));
-        assert_eq!(m.deref(HeapAddr(5)), HeapAddr(5));
-        assert_eq!(m.deref(HeapAddr(6)), HeapAddr(3));
-        assert_eq!(m.deref(Register(X(3))), HeapAddr(4));
-    }
-
     #[test]
     fn test_exercise_2_1() {
-        let mut m = Machine::new();
+        let mut machine = Machine::new();
+        machine.execute(&figure_2_3_instructions());
 
-        m.put_structure(Functor::from("h/2"), X(3));
-        m.set_variable(X(2));
-        m.set_variable(X(5));
-        m.put_structure(Functor::from("f/1"), X(4));
-        m.set_value(X(5));
-        m.put_structure(Functor::from("p/3"), X(1));
-        m.set_value(X(2));
-        m.set_value(X(3));
-        m.set_value(X(4));
+        assert!(!machine.fail);
+        assert_eq!(
+            "p(_X2, h(_X2, _X3), f(_X3))",
+            show_cell(&machine, HeapAddr(7))
+        );
+    }
 
-        let expected_heap_cells = vec![
-            Str(1),
-            Cell::from("h/2"),
-            Ref(2),
-            Ref(3),
-            Str(5),
-            Cell::from("f/1"),
-            Ref(3),
-            Str(8),
-            Cell::from("p/3"),
-            Ref(2),
-            Str(1),
-            Str(5),
-        ];
+    #[test]
+    fn test_exercise_2_2() {
+        let mut machine = Machine::new();
+        machine.heap = exercise_2_2_heap_representation();
+        machine.unify(HeapAddr(6), HeapAddr(12));
 
-        let heap_cells = &m.heap;
-        assert_eq!(heap_cells, &expected_heap_cells);
+        assert!(!machine.fail);
+        assert_eq!(machine.heap, exercise_2_2_mutated_heap_representation());
 
-        register_is(&m, X(1), Str(8));
-        register_is(&m, X(2), Ref(2));
-        register_is(&m, X(3), Str(1));
-        register_is(&m, X(4), Str(5));
-        register_is(&m, X(5), Ref(3));
+        let x = format!("X = {}", show_cell(&machine, HeapAddr(10)));
+        let y = format!("Y = {}", show_cell(&machine, HeapAddr(15)));
+
+        assert_eq!("X = b", x);
+        assert_eq!("Y = g(b, a)", y);
     }
 
     #[test]
     fn test_exercise_2_3() {
-        let mut m = Machine::new();
-
-        m.put_structure(Functor::from("h/2"), X(3));
-        m.set_variable(X(2));
-        m.set_variable(X(5));
-        m.put_structure(Functor::from("f/1"), X(4));
-        m.set_value(X(5));
-        m.put_structure(Functor::from("p/3"), X(1));
-        m.set_value(X(2));
-        m.set_value(X(3));
-        m.set_value(X(4));
-
-        m.get_structure(Functor::from("p/3"), X(1));
-        m.unify_variable(X(2));
-        m.unify_variable(X(3));
-        m.unify_variable(X(4));
-        m.get_structure(Functor::from("f/1"), X(2));
-        m.unify_variable(X(5));
-        m.get_structure(Functor::from("h/2"), X(3));
-        m.unify_value(X(4));
-        m.unify_variable(X(6));
-        m.get_structure(Functor::from("f/1"), X(6));
-        m.unify_variable(X(7));
-        m.get_structure(Functor::from("a/0"), X(7));
-
-        let expected_heap_cells = vec![
-            Str(1),
-            Cell::from("h/2"),
-            Str(13),
-            Str(16),
-            Str(5),
-            Cell::from("f/1"),
-            Ref(3),
-            Str(8),
-            Cell::from("p/3"),
-            Ref(2),
-            Str(1),
-            Str(5),
-            Str(13),
-            Cell::from("f/1"),
-            Ref(3),
-            Str(16),
-            Cell::from("f/1"),
-            Str(19),
-            Str(19),
-            Cell::from("a/0"),
-        ];
-
-        let heap_cells = &m.heap;
-        assert_eq!(heap_cells, &expected_heap_cells);
-
-        register_is(&m, X(1), Str(8));
-        register_is(&m, X(2), Ref(2));
-        register_is(&m, X(3), Str(1));
-        register_is(&m, X(4), Str(5));
-        register_is(&m, X(5), Ref(14));
-        register_is(&m, X(6), Ref(3));
-        register_is(&m, X(7), Ref(17));
-    }
-
-    #[test]
-    fn test_program_instruction_compilation_fig_2_3() {
-        let e = parser::ExpressionParser::new();
-
-        let expected_instructions = vec![
-            Instruction::PutVariable(X(4), X(1)),
-            Instruction::PutStructure(Functor::from("h/2"), X(2)),
-            Instruction::SetValue(X(4)),
-            Instruction::SetVariable(X(5)),
-            Instruction::PutStructure(Functor::from("f/1"), X(3)),
-            Instruction::SetValue(X(5)),
-            Instruction::Call(Functor::from("p/3")),
-        ];
-
-        let mut p = e.parse("p(Z, h(Z, W), f(W)).").unwrap();
-        let mut map = HashMap::new();
-        let mut seen = HashSet::new();
-        let instructions = compile_query(&p, &mut map, &mut seen);
-
-        assert_eq!(expected_instructions, instructions);
-    }
-
-    #[test]
-    fn test_program_instruction_compilation_fig_2_4() {
-        let e = parser::ExpressionParser::new();
-
-        let expected_instructions = vec![
-            Instruction::GetStructure(Functor::from("f/1"), X(1)),
-            Instruction::UnifyVariable(X(4)),
-            Instruction::GetStructure(Functor::from("h/2"), X(2)),
-            Instruction::UnifyVariable(X(5)),
-            Instruction::UnifyVariable(X(6)),
-            Instruction::GetValue(X(5), X(3)),
-            Instruction::GetStructure(Functor::from("f/1"), X(6)),
-            Instruction::UnifyVariable(X(7)),
-            Instruction::GetStructure(Functor::from("a/0"), X(7)),
-            Instruction::Proceed,
-        ];
-
-        let mut p = e.parse("p(f(X), h(Y, f(a)), Y).").unwrap();
-        let mut seen = HashSet::new();
-        let mut map = HashMap::new();
-        let instructions = compile_fact(&p, &mut map, &mut seen);
-
-        assert_eq!(expected_instructions, instructions);
-    }
-
-    #[test]
-    fn test_instruction_compilation_exercise_2_4() {
-        let e = parser::ExpressionParser::new();
-
-        let expected_query_instructions = vec![
-            Instruction::PutStructure(Functor::from("f/1"), X(1)),
-            Instruction::SetVariable(X(4)),
-            Instruction::PutStructure(Functor::from("a/0"), X(7)),
-            Instruction::PutStructure(Functor::from("f/1"), X(6)),
-            Instruction::SetValue(X(7)),
-            Instruction::PutStructure(Functor::from("h/2"), X(2)),
-            Instruction::SetVariable(X(5)),
-            Instruction::SetValue(X(6)),
-            Instruction::PutValue(X(5), X(3)),
-            Instruction::Call(Functor::from("p/3")),
-        ];
-
-        let expected_program_instructions = vec![
-            Instruction::GetVariable(X(4), X(1)),
-            Instruction::GetStructure(Functor::from("h/2"), X(2)),
-            Instruction::UnifyValue(X(4)),
-            Instruction::UnifyVariable(X(5)),
-            Instruction::GetStructure(Functor::from("f/1"), X(3)),
-            Instruction::UnifyValue(X(5)),
-            Instruction::Proceed,
-        ];
-
-        let mut q = e.parse("p(f(X), h(Y, f(a)), Y).").unwrap();
-        let mut p = e.parse("p(Z, h(Z, W), f(W)).").unwrap();
-        let mut query_seen = HashSet::new();
-        let mut query_map = HashMap::new();
-        let mut program_seen = HashSet::new();
-        let mut program_map = HashMap::new();
-
-        let query_instructions = compile_query(&q, &mut query_map, &mut query_seen);
-        let program_instructions = compile_fact(&p, &mut program_map, &mut program_seen);
-
-        assert_eq!(expected_query_instructions, query_instructions);
-        assert_eq!(expected_program_instructions, program_instructions);
-    }
-
-    #[test]
-    fn test_query_execution_2_6() {
-        let mut m = Machine::new();
-
-        m.put_variable(X(4), X(1));
-        m.put_structure(Functor::from("h/2"), X(2));
-        m.set_value(X(4));
-        m.set_variable(X(5));
-        m.put_structure(Functor::from("f/1"), X(3));
-        m.set_value(X(5));
-        //        m.call(Functor::from("p/3"));
-
-        let expected_heap_cells = vec![
-            Ref(0),
-            Str(2),
-            Cell::from("h/2"),
-            Ref(0),
-            Ref(4),
-            Str(6),
-            Cell::from("f/1"),
-            Ref(4),
-        ];
-
-        let heap_cells = m.heap;
-        assert_eq!(&heap_cells, &expected_heap_cells);
-    }
-
-    #[test]
-    fn test_exercise_2_7() {
-        let mut m = Machine::new();
-
-        m.put_variable(X(4), X(1));
-        m.put_structure(Functor::from("h/2"), X(2));
-        m.set_value(X(4));
-        m.set_variable(X(5));
-        m.put_structure(Functor::from("f/1"), X(3));
-        m.set_value(X(5));
-        //        m.call(Functor::from("p/3"));
-
-        m.get_structure(Functor::from("f/1"), X(1));
-        m.unify_variable(X(4));
-        m.get_structure(Functor::from("h/2"), X(2));
-        m.unify_variable(X(5));
-        m.unify_variable(X(6));
-        m.get_value(X(5), X(3));
-        m.get_structure(Functor::from("f/1"), X(6));
-        m.unify_variable(X(7));
-        m.get_structure(Functor::from("a/0"), X(7));
-        m.proceed();
-
-        let expected_heap_cells = vec![
-            Str(9),
-            Str(2),
-            Cell::from("h/2"),
-            Ref(0),
-            Str(12),
-            Str(6),
-            Cell::from("f/1"),
-            Ref(4),
-            Str(9),
-            Cell::from("f/1"),
-            Ref(4),
-            Str(12),
-            Cell::from("f/1"),
-            Str(15),
-            Str(15),
-            Cell::from("a/0"),
-        ];
-
-        let heap_cells = &m.heap;
-        assert_eq!(heap_cells, &expected_heap_cells);
-
-        register_is(&m, X(1), Ref(0));
-        register_is(&m, X(2), Str(2));
-        register_is(&m, X(3), Str(6));
-        register_is(&m, X(4), Ref(10));
-        register_is(&m, X(5), Ref(0));
-        register_is(&m, X(6), Ref(4));
-        register_is(&m, X(7), Ref(13));
-    }
-
-    #[test]
-    fn test_instruction_compilation_exercise_2_8() {
-        let q = Compound {
-            name: "p".to_string(),
-            arity: 3,
-            args: vec![
-                Term::Compound(Compound {
-                    name: "f".to_string(),
-                    arity: 1,
-                    args: vec![Term::Var(Var("X".to_string()))],
-                }),
-                Term::Compound(Compound {
-                    name: "h".to_string(),
-                    arity: 2,
-                    args: vec![
-                        Term::Var(Var("Y".to_string())),
-                        Term::Compound(Compound {
-                            name: "f".to_string(),
-                            arity: 1,
-                            args: vec![Term::Atom(Atom("a".to_string()))],
-                        }),
-                    ],
-                }),
-                Term::Var(Var("Y".to_string())),
-            ],
-        };
-
-        let p = Compound {
-            name: "p".to_string(),
-            arity: 3,
-            args: vec![
-                Term::Var(Var("Z".to_string())),
-                Term::Compound(Compound {
-                    name: "h".to_string(),
-                    arity: 2,
-                    args: vec![
-                        Term::Var(Var("Z".to_string())),
-                        Term::Var(Var("W".to_string())),
-                    ],
-                }),
-                Term::Compound(Compound {
-                    name: "f".to_string(),
-                    arity: 1,
-                    args: vec![Term::Var(Var("W".to_string()))],
-                }),
-            ],
-        };
-
-        let expected_query_instructions = vec![
-            Instruction::PutStructure(Functor::from("f/1"), X(1)),
-            Instruction::SetVariable(X(4)),
-            Instruction::PutStructure(Functor::from("a/0"), X(7)),
-            Instruction::PutStructure(Functor::from("f/1"), X(6)),
-            Instruction::SetValue(X(7)),
-            Instruction::PutStructure(Functor::from("h/2"), X(2)),
-            Instruction::SetVariable(X(5)),
-            Instruction::SetValue(X(6)),
-            Instruction::PutValue(X(5), X(3)),
-            Instruction::Call(Functor::from("p/3")),
-        ];
-
-        let expected_program_instructions = vec![
-            Instruction::GetVariable(X(4), X(1)),
-            Instruction::GetStructure(Functor::from("h/2"), X(2)),
-            Instruction::UnifyValue(X(4)),
-            Instruction::UnifyVariable(X(5)),
-            Instruction::GetStructure(Functor::from("f/1"), X(3)),
-            Instruction::UnifyValue(X(5)),
-            Instruction::Proceed,
-        ];
-
-        let mut query_seen = HashSet::new();
-        let mut query_map = HashMap::new();
-        let mut program_seen = HashSet::new();
-        let mut program_map = HashMap::new();
-
-        let query_instructions = compile_query(&q, &mut query_map, &mut query_seen);
-        let program_instructions = compile_fact(&p, &mut program_map, &mut program_seen);
-
-        assert_eq!(&expected_query_instructions, &query_instructions);
-        assert_eq!(&expected_program_instructions, &program_instructions);
-    }
-
-    #[test]
-    fn test_instruction_compilation_figure_2_9() {
-        let q = Compound {
-            name: "p".to_string(),
-            arity: 3,
-            args: vec![
-                Term::Var(Var("Z".to_string())),
-                Term::Compound(Compound {
-                    name: "h".to_string(),
-                    arity: 2,
-                    args: vec![
-                        Term::Var(Var("Z".to_string())),
-                        Term::Var(Var("W".to_string())),
-                    ],
-                }),
-                Term::Compound(Compound {
-                    name: "f".to_string(),
-                    arity: 1,
-                    args: vec![Term::Var(Var("W".to_string()))],
-                }),
-            ],
-        };
-
-        let expected_query_instructions = vec![
-            Instruction::PutVariable(X(4), X(1)),
-            Instruction::PutStructure(Functor::from("h/2"), X(2)),
-            Instruction::SetValue(X(4)),
-            Instruction::SetVariable(X(5)),
-            Instruction::PutStructure(Functor::from("f/1"), X(3)),
-            Instruction::SetValue(X(5)),
-            Instruction::Call(Functor::from("p/3")),
-        ];
-
-        let mut seen = HashSet::new();
-        let mut map = HashMap::new();
-        let query_instructions = compile_query(&q, &mut map, &mut seen);
-
-        assert_eq!(&expected_query_instructions, &query_instructions);
-    }
-
-    #[test]
-    fn test_instruction_compilation_figure_2_10() {
-        let q = Compound {
-            name: "p".to_string(),
-            arity: 3,
-            args: vec![
-                Term::Compound(Compound {
-                    name: "f".to_string(),
-                    arity: 1,
-                    args: vec![Term::Var(Var("X".to_string()))],
-                }),
-                Term::Compound(Compound {
-                    name: "h".to_string(),
-                    arity: 2,
-                    args: vec![
-                        Term::Var(Var("Y".to_string())),
-                        Term::Compound(Compound {
-                            name: "f".to_string(),
-                            arity: 1,
-                            args: vec![Term::Atom(Atom("a".to_string()))],
-                        }),
-                    ],
-                }),
-                Term::Var(Var("Y".to_string())),
-            ],
-        };
-
-        let expected_program_instructions = vec![
-            Instruction::GetStructure(Functor::from("f/1"), X(1)),
-            Instruction::UnifyVariable(X(4)),
-            Instruction::GetStructure(Functor::from("h/2"), X(2)),
-            Instruction::UnifyVariable(X(5)),
-            Instruction::UnifyVariable(X(6)),
-            Instruction::GetValue(X(5), X(3)),
-            Instruction::GetStructure(Functor::from("f/1"), X(6)),
-            Instruction::UnifyVariable(X(7)),
-            Instruction::GetStructure(Functor::from("a/0"), X(7)),
-            Instruction::Proceed,
-        ];
-
-        let mut seen = HashSet::new();
-        let mut map = HashMap::new();
-        let program_instructions = compile_fact(&q, &mut map, &mut seen);
-
-        assert_eq!(&expected_program_instructions, &program_instructions);
-    }
-
-    #[test]
-    fn test_fact_instruction_compilation_exercise_3_1() {
-        let fact1 = Term::Compound(Compound {
-            name: "q".to_string(),
-            arity: 2,
-            args: vec![
-                Term::Atom(Atom("a".to_string())),
-                Term::Atom(Atom("b".to_string())),
-            ],
-        });
-
-        let fact2 = Term::Compound(Compound {
-            name: "r".to_string(),
-            arity: 2,
-            args: vec![
-                Term::Atom(Atom("b".to_string())),
-                Term::Atom(Atom("c".to_string())),
-            ],
-        });
-
-        let r = Rule {
-            head: Compound {
-                name: "p".to_string(),
-                arity: 2,
-                args: vec![
-                    Term::Var(Var("X".to_string())),
-                    Term::Var(Var("Y".to_string())),
-                ],
-            },
-            body: vec![
-                Compound {
-                    name: "q".to_string(),
-                    arity: 2,
-                    args: vec![
-                        Term::Var(Var("X".to_string())),
-                        Term::Var(Var("Z".to_string())),
-                    ],
-                },
-                Compound {
-                    name: "r".to_string(),
-                    arity: 2,
-                    args: vec![
-                        Term::Var(Var("Z".to_string())),
-                        Term::Var(Var("Y".to_string())),
-                    ],
-                },
-            ],
-        };
-
-        let expected_fact1_instructions = vec![
-            Instruction::GetStructure(Functor::from("a/0"), X(1)),
-            Instruction::GetStructure(Functor::from("b/0"), X(2)),
-            Instruction::Proceed,
-        ];
-
-        let expected_fact2_instructions = vec![
-            Instruction::GetStructure(Functor::from("b/0"), X(1)),
-            Instruction::GetStructure(Functor::from("c/0"), X(2)),
-            Instruction::Proceed,
-        ];
-
-        let expected_rule_instructions = vec![
-            Instruction::Allocate(2),
-            Instruction::GetVariable(X(3), X(1)),
-            Instruction::GetVariable(Y(1), X(2)),
-            Instruction::PutValue(X(3), X(1)),
-            Instruction::PutVariable(Y(2), X(2)),
-            Instruction::Call(Functor::from("q/2")),
-            Instruction::PutValue(Y(2), X(1)),
-            Instruction::PutValue(Y(1), X(2)),
-            Instruction::Call(Functor::from("r/2")),
-            Instruction::Deallocate,
-        ];
-
-        let mut m = HashMap::new();
-        let mut seen = HashSet::new();
-
-        let rule_instructions = compile_rule(&r, &mut m, &mut seen);
-        let fact1_instructions = compile_fact(&fact1, &mut m, &mut seen);
-        let fact2_instructions = compile_fact(&fact2, &mut m, &mut seen);
-        let r_functor = Functor::from("p/2");
-        let f1_functor = Functor::from("q/2");
-        let f2_functor = Functor::from("r/2");
-
-        assert_eq!(&expected_fact1_instructions, &fact1_instructions);
-        assert_eq!(&expected_fact2_instructions, &fact2_instructions);
-        assert_eq!(&expected_rule_instructions, &rule_instructions);
-
         let mut machine = Machine::new();
 
-        machine.push_instructions(&r_functor, &rule_instructions);
-        machine.push_instructions(&f1_functor, &fact1_instructions);
-        machine.push_instructions(&f2_functor, &fact2_instructions);
-        let results = query(&mut machine, "p(U, V).");
-        machine.execute_instructions(&r_functor);
-        machine.execute_instructions(&f1_functor);
-        machine.execute_instructions(&f2_functor);
+        machine.execute(&figure_2_3_instructions());
+        let w = machine.deref(Register(X(5)));
+        let z = machine.deref(Register(X(2)));
 
-        println!("{:?}", machine);
-        println!("{:?}", results);
+        machine.execute(&figure_2_4_instructions());
+        let x = machine.deref(Register(X(5)));
+        let y = machine.deref(Register(X(4)));
+        let show = |store| show_cell(&machine, store);
+
+        assert!(!machine.fail);
+        assert_eq!("W = f(a)", format!("W = {}", show(w)));
+        assert_eq!("X = f(a)", format!("X = {}", show(x)));
+        assert_eq!("Y = f(f(a))", format!("Y = {}", show(y)));
+        assert_eq!("Z = f(f(a))", format!("Z = {}", show(z)));
     }
 
     #[test]
-    fn test_unify_variable_read_mode() {
-        let mut m = Machine::new();
+    fn test_exercise_2_4() {
+        let mut machine = Machine::new();
+        let parser = parser::ExpressionParser::new();
+        let query = parser.parse("p(f(X), h(Y, f(a)), Y).").unwrap();
+        let program = parser.parse("p(Z, h(Z, W), f(W)).").unwrap();
 
-        m.mode = Read;
-        m.heap.push(Ref(3));
-        m.unify_variable(X(1));
+        println!("query: {:?}\nprogram: {:?}", query, program);
 
-        assert_eq!(m.get_x(1).cloned().unwrap(), Ref(3));
-        assert_eq!(m.registers.s, 1);
-    }
-
-    #[test]
-    fn test_unify_variable_write_mode() {
-        let mut m = Machine::new();
-
-        m.mode = Write;
-        m.unify_variable(X(1));
-
-        assert_eq!(m.heap[0], Ref(0));
-        assert_eq!(m.get_x(1).cloned().unwrap(), Ref(0));
-        assert_eq!(m.registers.h, 1);
-        assert_eq!(m.registers.s, 1);
-    }
-
-    #[test]
-    fn test_functor_eq() {
-        let f1 = Functor::from("foo/1");
-        let f2 = Functor::from("bar/1");
-
-        assert_ne!(f1, f2);
-
-        let f2 = Functor::from("foo/1");
-        assert_eq!(f1, f2);
-
-        let f2 = Functor::from("foo/2");
-        assert_ne!(f1, f2);
-    }
-
-    #[test]
-    fn test_compound_structure_rendering() {
-        let t = Term::Compound(Compound {
-            name: String::from("foo"),
-            arity: 2,
-            args: vec![
-                Term::Atom(Atom("bar".to_string())),
-                Term::Atom(Atom("baz".to_string())),
-            ],
-        });
-
-        assert_eq!(t.to_string(), "foo(bar, baz)");
-    }
-
-    #[test]
-    fn test_atomic_structure_rendering() {
-        let t = Term::Compound(Compound {
-            name: String::from("bar"),
-            arity: 0,
-            args: Vec::new(),
-        });
-
-        assert_eq!(t.to_string(), "bar");
-    }
-
-    #[test]
-    fn test_atom_parser() {
-        let atom_parser = parser::AtomParser::new();
-
-        // atoms
-        assert!(atom_parser.parse("22").is_err());
-        assert!(atom_parser.parse("_Abc").is_err());
-        assert!(atom_parser.parse("Abc").is_err());
-        assert!(atom_parser.parse("abc").is_ok());
-        assert!(atom_parser.parse("'Abc'").is_ok());
-        assert!(atom_parser.parse("'Abc").is_err());
-        assert!(atom_parser.parse(".q").is_err());
-        assert!(atom_parser.parse("snake_case").is_ok());
-        assert!(atom_parser.parse("'snake_case'").is_ok());
-        assert!(atom_parser.parse("This_Fails").is_err());
-        assert!(atom_parser.parse("'This_Succeeds'").is_ok());
-    }
-
-    #[test]
-    fn test_compound_parser() {
-        let c = parser::CompoundParser::new();
-
-        // compounds
-        assert!(c.parse("p(Z, h(Z, W), f(W))").is_ok());
-        assert!(c.parse("p (Z, h(Z, W), f(W))").is_err());
-        assert!(c.parse("p(Z, h(Z, W), f(W)").is_err());
-        assert!(c.parse("p(Z, h(Z,, f(W)").is_err());
-        assert!(c.parse("p(Z, f(h(Z, W)), f(W))").is_ok());
-    }
-
-    #[test]
-    fn test_simple_expressions() {
-        let e = parser::ExpressionParser::new();
-
-        //expressions
-        assert!(e.parse("A.").is_ok());
-        assert!(e.parse("2.").is_err());
-        assert!(e.parse("foo(bar).").is_ok());
-        assert!(e.parse("foo.").is_ok());
-    }
-
-    #[test]
-    fn test_instruction_compilation_exercise_2_1() {
-        let e = parser::ExpressionParser::new();
-
-        let expected_instructions = vec![
-            Instruction::PutVariable(X(4), X(1)),
-            Instruction::PutStructure(Functor::from("h/2"), X(2)),
-            Instruction::SetValue(X(4)),
+        let expected_query_instructions = vec![
+            Instruction::PutStructure(Functor::from("f/1"), X(2)),
             Instruction::SetVariable(X(5)),
-            Instruction::PutStructure(Functor::from("f/1"), X(3)),
-            Instruction::SetValue(X(5)),
-            Instruction::Call(Functor::from("p/3")),
+            Instruction::PutStructure(Functor::from("a/0"), X(7)),
+            Instruction::PutStructure(Functor::from("f/1"), X(6)),
+            Instruction::SetValue(X(7)),
+            Instruction::PutStructure(Functor::from("h/2"), X(3)),
+            Instruction::SetVariable(X(4)),
+            Instruction::SetValue(X(6)),
+            Instruction::PutStructure(Functor::from("p/3"), X(1)),
+            Instruction::SetValue(X(2)),
+            Instruction::SetValue(X(3)),
+            Instruction::SetValue(X(4)),
         ];
 
-        let mut q = e.parse("p(Z, h(Z, W), f(W)).").unwrap();
-        let mut seen = HashSet::new();
-        let mut map = HashMap::new();
-        let instructions = compile_query(&q, &mut map, &mut seen);
-
-        assert_eq!(expected_instructions, instructions);
+        let expected_program_instructions = vec![
+            Instruction::GetStructure(Functor::from("p/3"), X(1)),
+            Instruction::UnifyVariable(X(2)),
+            Instruction::UnifyVariable(X(3)),
+            Instruction::UnifyVariable(X(4)),
+            Instruction::GetStructure(Functor::from("h/2"), X(3)),
+            Instruction::UnifyValue(X(2)),
+            Instruction::UnifyVariable(X(5)),
+            Instruction::GetStructure(Functor::from("f/1"), X(4)),
+            Instruction::UnifyValue(X(5)),
+        ];
     }
 
-    fn register_is(machine: &Machine, register: Register, cell: Cell) {
-        assert_eq!(machine.get_register(register).cloned().unwrap(), cell);
+    // utility test functions
+
+    // Figure 2.3: Compiled code for L0 query ?- p(Z, h(Z, W), f(W)).
+    fn figure_2_3_instructions() -> Instructions {
+        vec![
+            Instruction::PutStructure(Functor::from("h/2"), X(3)),
+            Instruction::SetVariable(X(2)),
+            Instruction::SetVariable(X(5)),
+            Instruction::PutStructure(Functor::from("f/1"), X(4)),
+            Instruction::SetValue(X(5)),
+            Instruction::PutStructure(Functor::from("p/3"), X(1)),
+            Instruction::SetValue(X(2)),
+            Instruction::SetValue(X(3)),
+            Instruction::SetValue(X(4)),
+        ]
+    }
+
+    // Figure 2.4: Compiled code for L0 program p(f(X), h(Y, f(a)), Y).
+    fn figure_2_4_instructions() -> Instructions {
+        vec![
+            Instruction::GetStructure(Functor::from("p/3"), X(1)),
+            Instruction::UnifyVariable(X(2)),
+            Instruction::UnifyVariable(X(3)),
+            Instruction::UnifyVariable(X(4)),
+            Instruction::GetStructure(Functor::from("f/1"), X(2)),
+            Instruction::UnifyVariable(X(5)),
+            Instruction::GetStructure(Functor::from("h/2"), X(3)),
+            Instruction::UnifyValue(X(4)),
+            Instruction::UnifyVariable(X(6)),
+            Instruction::GetStructure(Functor::from("f/1"), X(6)),
+            Instruction::UnifyVariable(X(7)),
+            Instruction::GetStructure(Functor::from("a/0"), X(7)),
+        ]
+    }
+
+    // Exercise 2.2: Heap representations for f(X, g(X, a)) and f(b, Y).
+    fn exercise_2_2_heap_representation() -> Vec<Cell> {
+        vec![
+            Str(1),
+            Func(Functor::from("a/0")),
+            Str(3),
+            Func(Functor::from("g/2")),
+            Ref(4),
+            Str(1),
+            Str(7),
+            Func(Functor::from("f/2")),
+            Ref(4),
+            Str(3),
+            Str(11),
+            Func(Functor::from("b/0")),
+            Str(13),
+            Func(Functor::from("f/2")),
+            Str(11),
+            Ref(15),
+        ]
+    }
+
+    // Exercise 2.2: Heap representations for f(X, g(X, a)) and f(b, Y), post-unification.
+    fn exercise_2_2_mutated_heap_representation() -> Vec<Cell> {
+        vec![
+            Str(1),
+            Func(Functor::from("a/0")),
+            Str(3),
+            Func(Functor::from("g/2")),
+            Str(11),
+            Str(1),
+            Str(7),
+            Func(Functor::from("f/2")),
+            Ref(4),
+            Str(3),
+            Str(11),
+            Func(Functor::from("b/0")),
+            Str(13),
+            Func(Functor::from("f/2")),
+            Str(11),
+            Str(3),
+        ]
+    }
+
+    fn show_cell(machine: &Machine, address: Store) -> String {
+        let d = machine.get_store_cell(machine.deref(address));
+
+        match d.clone() {
+            Ref(a) => {
+                if let Ref(a) = machine.heap[a] {
+                    format!("_X{}", a)
+                } else {
+                    show_cell(machine, HeapAddr(a))
+                }
+            }
+            Str(a) => {
+                let cell = Str(a);
+                let Functor(name, arity) = machine.get_functor(&cell).clone();
+
+                if arity == 0 {
+                    name
+                } else {
+                    let mut s = format!("{}(", name);
+
+                    for i in 1..arity {
+                        let t = show_cell(machine, HeapAddr(a + i));
+                        s.push_str(&format!("{}, ", t));
+                    }
+
+                    let t = show_cell(machine, HeapAddr(a + arity));
+                    s.push_str(&format!("{})", t));
+
+                    s
+                }
+            }
+            Func(_) => panic!("Attempted to render a functor, when a ref or str cell was expected"),
+        }
     }
 }
