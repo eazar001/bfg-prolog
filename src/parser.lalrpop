@@ -13,11 +13,6 @@ pub Args: Vec<Term> = {
         args.push(Term::Var(var));
         args
     },
-    <n:Number> <c:Comma> <args:Args> => {
-        let mut args = args;
-        args.push(Term::Number(n));
-        args
-    },
     <a:Atom> <c:Comma> <args:Args> => {
         let mut args = args;
         args.push(Term::Atom(a));
@@ -32,10 +27,6 @@ pub Args: Vec<Term> = {
         let args = vec![Term::Var(v)];
         args
     },
-    <n:Number> ")" => {
-        let args = vec![Term::Number(n)];
-        args
-    },
     <a:Atom> ")" => {
         let args = vec![Term::Atom(a)];
         args
@@ -46,18 +37,32 @@ pub Args: Vec<Term> = {
     }
 };
 
+pub Body: Vec<Compound> = {
+    <a:Atom> <c:Comma> <body:Body> => {
+        let mut body = body;
+        body.push(Term::Atom(a).structuralize().unwrap());
+        body
+    },
+    <compound:Compound> <c:Comma> <body:Body> => {
+        let mut body = body;
+        body.push(Term::Compound(compound).structuralize().unwrap());
+        body
+    },
+    <a:Atom> "." => {
+        let body = vec![Term::Atom(a).structuralize().unwrap()];
+        body
+    },
+    <c:Compound> "." => {
+        let body = vec![Term::Compound(c).structuralize().unwrap()];
+        body
+    }
+};
+
 pub Atom: Atom = {
     // unquoted atoms
     <r"[a-z]+[A-Za-z_0-9]*"> => Atom(<>.parse().unwrap()),
     // quoted atoms
     <r"'[A-Za-z0-9_]*'"> => Atom(<>.parse().unwrap())
-};
-
-pub Number: Number = {
-    // integers
-    <r"[0-9]+"> => Number::Integer(<>.parse().unwrap()),
-    // floats
-//    <r"[0-9]+\.[0-9]+"> => Number::Float(<>.parse().unwrap())
 };
 
 pub Var: Var = {
@@ -90,5 +95,18 @@ pub Compound: Compound = {
 pub Expression: Term = {
     <Atom> "." => Term::Atom(<>),
     <Var> "." => Term::Var(<>),
-    <Compound> "." => Term::Compound(<>)
+    <Compound> "." => Term::Compound(<>),
+    <head:Atom> ":-" <body:Body> => {
+        let head = head.structuralize().unwrap();
+        let mut body = body;
+        body.reverse();
+        let rule = Rule { head: head, body: body };
+        Term::Rule(rule)
+    },
+    <head:Compound> ":-" <body:Body> => {
+        let mut body = body;
+        body.reverse();
+        let rule = Rule { head: head, body: body };
+        Term::Rule(rule)
+    }
 }

@@ -1731,24 +1731,6 @@ mod tests {
     }
 
     #[test]
-    fn test_number_parser() {
-        let number_parser = parser::NumberParser::new();
-
-        // numbers
-        assert!(number_parser.parse("2").is_ok());
-        assert!(number_parser.parse("42").is_ok());
-        assert!(number_parser.parse("34345354").is_ok());
-        //    assert!(number_parser.parse("3.3").is_ok());
-        //    assert!(number_parser.parse("3.30").is_ok());
-        //    assert!(number_parser.parse("0.3").is_ok());
-        assert!(number_parser.parse("a03").is_err());
-        assert!(number_parser.parse("_21").is_err());
-        assert!(number_parser.parse("2_12").is_err());
-        assert!(number_parser.parse(".3").is_err());
-        assert!(number_parser.parse("2.").is_err());
-    }
-
-    #[test]
     fn test_compound_parser() {
         let c = parser::CompoundParser::new();
 
