@@ -4,33 +4,29 @@
 
 pub mod ast;
 
-use self::Cell::*;
-use self::Store::*;
-use self::Register::*;
-use self::Mode::{Read, Write};
 use self::ast::*;
-use std::collections::{HashMap, HashSet};
-use std::fmt::{Display, Formatter, Debug};
-use std::cmp::Ordering;
+use self::Cell::*;
+use self::Mode::{Read, Write};
+use self::Register::*;
+use self::Store::*;
 use env_logger;
-use log::{info, warn, error, debug, trace, Level};
-use log::Level::*;
 use lalrpop_util::lalrpop_mod;
+use log::Level::*;
+use log::{debug, error, info, trace, warn, Level};
+use std::cmp::Ordering;
+use std::collections::{HashMap, HashSet};
+use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
 
 lalrpop_mod!(pub parser);
 
-
-// heap address represented as usize that corresponds to the vector containing cell data
 type HeapAddress = usize;
-type Address =  usize;
+type Address = usize;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub enum Register {
-    // temporary
     X(usize),
-    // permanent
-    Y(usize)
+    Y(usize),
 }
 
 type FunctorArity = usize;
@@ -59,7 +55,7 @@ pub enum Instruction {
     Allocate(usize),
     Deallocate,
     Call(Functor),
-    Proceed
+    Proceed,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
@@ -69,54 +65,47 @@ pub struct Functor(pub FunctorName, pub FunctorArity);
 pub enum Cell {
     Str(HeapAddress),
     Ref(HeapAddress),
-    Func(Functor)
+    Func(Functor),
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Store {
     HeapAddr(HeapAddress),
-    Register(Register)
+    Register(Register),
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 enum Mode {
     Read,
-    Write
+    Write,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 struct Code {
     code_area: Instructions,
-    code_address: HashMap<Functor, usize>
+    code_address: HashMap<Functor, usize>,
 }
 
 // Environment stack frames
 #[derive(Debug, Clone, Eq, PartialEq)]
 enum Frame {
     Code(Address),
-    Cell(Cell)
+    Cell(Cell),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 struct Registers {
-    // the "h" counter contains the location of the next cell to be pushed onto the heap
     h: HeapAddress,
-    // variable register mapping a variable to cell data (x-register)
     x: Vec<Option<Cell>>,
-    // subterm register containing heap address of next subterm to be matched (s-register)
     s: Address,
-    // program/instruction counter, containing address of the next instruction to be executed
     p: Address,
-    // address of the next instruction in the code area to follow up after successful return from a call
     cp: Address,
-    // address of the latest environment on top of the stack
-    e: Address
+    e: Address,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Machine {
     heap: Heap,
-    // the "push-down-list" contains StoreAddresses and serves as a unification stack
     pdl: Vec<Store>,
     code: Code,
     stack: Vec<Option<Frame>>,
@@ -130,7 +119,7 @@ impl Display for Cell {
         match self {
             Ref(a) => Ok(write!(f, "{:?}", Ref(*a))?),
             Str(a) => Ok(write!(f, "{:?}", Str(*a))?),
-            Func(f1) => Ok(write!(f, "Functor({})", f1)?)
+            Func(f1) => Ok(write!(f, "Functor({})", f1)?),
         }
     }
 }
@@ -144,9 +133,7 @@ impl Display for Functor {
 impl From<&str> for Functor {
     fn from(s: &str) -> Functor {
         let v: Vec<&str> = s.split('/').collect();
-
         assert_eq!(v.len(), 2);
-
         Functor(String::from(v[0]), String::from(v[1]).parse().unwrap())
     }
 }
@@ -176,7 +163,7 @@ impl Machine {
             stack: Vec::new(),
             registers: Registers::new(),
             mode: Read,
-            fail: false
+            fail: false,
         }
     }
 
@@ -195,7 +182,7 @@ impl Machine {
             Instruction::Allocate(n) => self.allocate(*n),
             Instruction::Deallocate => self.deallocate(),
             Instruction::Call(f) => self.call(f),
-            Instruction::Proceed => self.proceed()
+            Instruction::Proceed => self.proceed(),
         }
     }
 
@@ -216,11 +203,11 @@ impl Machine {
 
         while a < instructions.len() {
             match &instructions[a] {
-                instruction@Instruction::Proceed | instruction@Instruction::Call(_) => {
+                instruction @ Instruction::Proceed | instruction @ Instruction::Call(_) => {
                     self.execute(instruction);
-                    break
-                },
-                instruction => self.execute(instruction)
+                    break;
+                }
+                instruction => self.execute(instruction),
             }
 
             a += 1;
@@ -240,99 +227,41 @@ impl Machine {
         *self.code.code_address.get(fact).unwrap()
     }
 
-    fn get_e(&self) -> usize {
-        self.registers.e
-    }
+    pub fn allocate(&mut self, n: usize) {}
 
-    fn set_e(&mut self, value: usize) {
-        self.registers.e = value;
-    }
-
-    pub fn get_heap(&self) -> &Heap {
-        &self.heap
-    }
-
-    pub fn allocate(&mut self, n: usize) {
-        let e = self.get_e();
-        self.stack.resize(e+n+5, None);
-        self.stack[e+2] = Some(Frame::Code(n));
-        let temp = match &self.stack[e+2] {
-            Some(Frame::Code(a)) => a,
-            _ => panic!("address retrieval error")
-        };
-
-        let new_e = e + temp + 3;
-
-        self.stack[new_e] = Some(Frame::Code(e));
-        self.stack[new_e+1] = Some(Frame::Code(self.get_cp()));
-        self.set_e(new_e);
-        self.set_p(self.get_p() + 1);
-    }
-
-    pub fn deallocate(&mut self) {
-        let stack = &self.stack;
-        let e = self.get_e();
-        let new_p = match &stack[e+1] {
-            Some(Frame::Code(a)) => *a,
-            _ => panic!("address retrieval error")
-        };
-
-        let new_e = match &stack[e] {
-            Some(Frame::Code(a)) => *a,
-            _ => panic!("address retrieval error")
-        };
-
-        self.set_p(new_p);
-        self.set_e(new_e);
-    }
-
-    pub fn get_x_registers(&self) -> &Vec<Option<Cell>> {
-        &self.registers.x
-    }
-
-    fn push_heap(&mut self, cell: Cell) {
-        self.heap.push(cell);
-    }
-
-    pub fn is_true(&self) -> bool {
-        !self.fail
-    }
-
-    pub fn is_false(&self) -> bool {
-        self.fail
-    }
+    pub fn deallocate(&mut self) {}
 
     pub fn get_register(&self, register: Register) -> Option<&Cell> {
         match register {
             Register::X(xi) => self.get_x(xi),
-            Register::Y(yi) => self.get_y(yi)
+            Register::Y(yi) => self.get_y(yi),
         }
     }
 
     pub fn get_x(&self, xi: usize) -> Option<&Cell> {
-        self.get_x_registers()[xi-1].as_ref()
+        self.registers.x[xi - 1].as_ref()
     }
 
     pub fn get_y(&self, yi: usize) -> Option<&Cell> {
-        let offset = self.get_e() + 3;
+        let offset = self.registers.e + 2;
         let stack = &self.stack;
 
-        match &stack[offset+yi] {
+        match &stack[offset + yi] {
             Some(Frame::Cell(c)) => Some(c),
-            _ => panic!("error retrieving cell-data from permanent register")
+            _ => panic!("error retrieving cell-data from permanent register"),
         }
     }
 
     fn insert_register(&mut self, register: Register, cell: Cell) {
         match register {
             Register::X(xi) => self.insert_x(xi, cell),
-            Register::Y(yi) => self.insert_y(yi, cell)
+            Register::Y(yi) => self.insert_y(yi, cell),
         }
     }
 
     fn insert_y(&mut self, yi: usize, cell: Cell) {
-        let offset = self.get_e() + 3;
-        self.stack[offset+yi] = Some(Frame::Cell(cell));
+        let offset = self.registers.e + 2;
+        self.stack[offset + yi] = Some(Frame::Cell(cell));
     }
 
     fn insert_x(&mut self, xi: usize, cell: Cell) {
@@ -340,79 +269,23 @@ impl Machine {
             self.registers.x.resize(xi, None);
         }
 
-        self.registers.x[xi-1] = Some(cell);
-    }
-
-    fn get_s(&self) -> HeapAddress {
-        self.registers.s
-    }
-
-    fn inc_s(&mut self, value: usize) {
-        self.registers.s += value;
-    }
-
-    fn set_s(&mut self, value: usize) {
-        self.registers.s = value;
-    }
-
-    fn set_fail(&mut self, value: bool) {
-        self.fail = value;
-    }
-
-    fn get_h(&self) -> usize {
-        self.registers.h
-    }
-
-    fn get_p(&self) -> usize {
-        self.registers.p
-    }
-
-    fn set_p(&mut self, value: usize) {
-        self.registers.p = value;
-    }
-
-    fn get_cp(&self) -> usize {
-        self.registers.cp
-    }
-
-    fn set_cp(&mut self, value: usize) {
-        self.registers.cp = value;
-    }
-
-    fn inc_h(&mut self, value: usize) {
-        self.registers.h += value;
-    }
-
-    fn set_mode(&mut self, mode: Mode) {
-        self.mode = mode;
-    }
-
-    fn empty_pdl(&mut self) -> bool {
-        self.pdl.is_empty()
-    }
-
-    fn push_pdl(&mut self, address: Store) {
-        self.pdl.push(address);
-    }
-
-    fn pop_pdl(&mut self) -> Option<Store> {
-        self.pdl.pop()
+        self.registers.x[xi - 1] = Some(cell);
     }
 
     fn put_structure(&mut self, f: Functor, xi: Register) {
-        let h = self.get_h();
-        self.push_heap(Str(h+1));
-        self.push_heap(Func(f));
-        self.insert_register(xi, Str(h+1));
-        self.inc_h(2);
+        let h = self.registers.h;
+        self.heap.push(Str(h + 1));
+        self.heap.push(Func(f));
+        self.insert_register(xi, Str(h + 1));
+        self.registers.h += 2;
     }
 
     fn put_variable(&mut self, xn: Register, ai: Register) {
-        let h = self.get_h();
-        self.push_heap(Ref(h));
+        let h = self.registers.h;
+        self.heap.push(Ref(h));
         self.insert_register(xn, Ref(h));
         self.insert_register(ai, Ref(h));
-        self.inc_h(1);
+        self.registers.h += 1;
     }
 
     fn put_value(&mut self, xn: Register, ai: Register) {
@@ -420,15 +293,15 @@ impl Machine {
     }
 
     fn set_variable(&mut self, xi: Register) {
-        let h = self.get_h();
-        self.push_heap(Ref(h));
+        let h = self.registers.h;
+        self.heap.push(Ref(h));
         self.insert_register(xi, Ref(h));
-        self.inc_h(1);
+        self.registers.h += 1;
     }
 
     fn set_value(&mut self, xi: Register) {
-        self.push_heap(self.get_register(xi).cloned().unwrap());
-        self.inc_h(1);
+        self.heap.push(self.get_register(xi).cloned().unwrap());
+        self.registers.h += 1;
     }
 
     fn deref(&self, address: Store) -> Store {
@@ -448,35 +321,23 @@ impl Machine {
             };
 
             match cell {
-                Ref(value) => {
-                    if *value != a {
-                        // keep following the reference chain
-                        address = HeapAddr(*value);
-                    } else {
-                        // ref cell is unbound return the address
-                        return address
-                    }
-                },
-                Str(_) => {
-                    return address
-                },
-                Func(_) => {
-                           return address
-                }
+                // keep following the reference chain
+                Ref(value) if *value != a => address = HeapAddr(*value),
+                Ref(_) | Str(_) | Func(_) => return address,
             }
         }
     }
 
     fn call(&mut self, f: &Functor) {
         let a = self.get_code_address(f);
-        let p = self.get_p();
-        self.set_cp(p+1);
-        self.set_p(a);
+        let p = self.registers.p;
+        self.registers.cp = p + 1;
+        self.registers.p = a;
     }
 
     fn proceed(&mut self) {
-        let cp = self.get_cp();
-        self.set_p(cp);
+        let cp = self.registers.cp;
+        self.registers.p = cp;
     }
 
     fn get_variable(&mut self, xn: Register, ai: Register) {
@@ -490,82 +351,69 @@ impl Machine {
     fn get_structure(&mut self, f: Functor, xi: Register) {
         let (cell, address) = match self.deref(Store::Register(xi)) {
             HeapAddr(addr) => (&self.heap[addr], addr),
-            Store::Register(r) => (self.get_register(xi).unwrap(), r.address())
+            Store::Register(r) => (self.get_register(xi).unwrap(), r.address()),
         };
 
         match cell.clone() {
             Ref(_) => {
-                let h = self.get_h();
-
-                self.push_heap(Str(h+1));
-                self.push_heap(Func(f.clone()));
+                let h = self.registers.h;
+                self.heap.push(Str(h + 1));
+                self.heap.push(Func(f.clone()));
                 self.bind(HeapAddr(address), HeapAddr(h));
-
-                self.inc_h(2);
-                self.set_mode(Write);
-            },
-            Str(a) => {
-                match self.heap[a] {
-                    Func(ref functor) => {
-                        if *functor == f {
-                            self.set_s(a+1);
-                            self.set_mode(Read);
-                        } else {
-                            self.set_fail(true);
-                        }
-                    }
-                    _ => panic!()
-                }
-            },
-            Func(_) => {
-                self.set_fail(true);
+                self.registers.h += 2;
+                self.mode = Write;
             }
+            Str(a) => match self.heap[a] {
+                Func(ref functor) if *functor == f => {
+                    self.registers.s = a + 1;
+                    self.mode = Read;
+                }
+                Func(_) => self.fail = true,
+                _ => panic!("Invalid structure cell pointing to non-functor cell"),
+            },
+            Func(_) => self.fail = true,
         }
     }
 
     fn unify_variable(&mut self, xi: Register) {
         match self.mode {
             Read => {
-                let s = self.get_s();
-
+                let s = self.registers.s;
                 self.insert_register(xi, self.heap[s].clone());
-            },
+            }
             Write => {
-                let h = self.get_h();
-
-                self.push_heap(Ref(h));
+                let h = self.registers.h;
+                self.heap.push(Ref(h));
                 self.insert_register(xi, Ref(h));
-                self.inc_h(1);
+                self.registers.h += 1;
             }
         }
 
-        self.inc_s(1);
+        self.registers.s += 1;
     }
 
     fn unify_value(&mut self, xi: Register) {
         match self.mode {
             Read => {
-                let s = self.get_s();
-
+                let s = self.registers.s;
                 self.unify(Store::Register(xi), Store::HeapAddr(s))
-            },
+            }
             Write => {
-                self.push_heap(self.get_register(xi).cloned().unwrap());
-                self.inc_h(1);
+                self.heap.push(self.get_register(xi).cloned().unwrap());
+                self.registers.h += 1;
             }
         }
 
-        self.inc_s(1);
+        self.registers.s += 1;
     }
 
     pub fn unify(&mut self, a1: Store, a2: Store) {
-        self.push_pdl(a1);
-        self.push_pdl(a2);
+        self.pdl.push(a1);
+        self.pdl.push(a2);
+        self.fail = false;
 
-        self.set_fail(false);
-
-        while !(self.empty_pdl() || self.fail) {
-            let (a1, a2) = (self.pop_pdl().unwrap(), self.pop_pdl().unwrap());
+        while !(self.pdl.is_empty() || self.fail) {
+            let (a1, a2) = (self.pdl.pop().unwrap(), self.pdl.pop().unwrap());
 
             let d1 = self.deref(a1);
             let d2 = self.deref(a2);
@@ -581,14 +429,12 @@ impl Machine {
                     let (f1, f2) = (self.get_functor(c1), self.get_functor(c2));
 
                     if f1 == f2 {
-                        let n1 = f1.arity();
-
-                        for i in 1..=n1 {
-                            self.push_pdl(HeapAddr(v1+i));
-                            self.push_pdl(HeapAddr(v2+i));
+                        for i in 1..=f1.arity() {
+                            self.pdl.push(HeapAddr(v1 + i));
+                            self.pdl.push(HeapAddr(v2 + i));
                         }
                     } else {
-                        self.set_fail(true);
+                        self.fail = true;
                     }
                 }
             }
@@ -605,11 +451,13 @@ impl Machine {
                     error!("encountered a structure that doesn't point to a functor");
                     panic!("invalid cell: structure cell pointing to non-functor data")
                 }
-            },
+            }
             Func(f) => {
-                warn!("accessing a functor from a functor-cell, but this normally shouldn't happen");
+                warn!(
+                    "accessing a functor from a functor-cell, but this normally shouldn't happen"
+                );
                 f
-            },
+            }
             Ref(_) => {
                 error!("tried getting a functor from a ref-cell");
                 panic!("invalid cell-type for functor retrieval used");
@@ -620,7 +468,7 @@ impl Machine {
     fn get_store_cell(&self, address: Store) -> &Cell {
         match address {
             HeapAddr(addr) => &self.heap[addr],
-            Register(r) => self.get_register(r).unwrap()
+            Register(r) => self.get_register(r).unwrap(),
         }
     }
 
@@ -639,20 +487,16 @@ impl Machine {
 impl Register {
     fn is_x(&self) -> bool {
         if let Register::X(_) = self {
-            return true
+            return true;
         }
 
         false
     }
 
-    fn is_y(&self) -> bool {
-        !self.is_x()
-    }
-
     fn address(&self) -> usize {
         match self {
             Register::X(a) => *a,
-            Register::Y(a) => *a
+            Register::Y(a) => *a,
         }
     }
 }
@@ -665,7 +509,7 @@ impl Registers {
             s: 0,
             p: 0,
             cp: 0,
-            e: 0
+            e: 0,
         }
     }
 }
@@ -673,23 +517,7 @@ impl Registers {
 impl Cell {
     fn is_ref(&self) -> bool {
         if let Ref(_) = self {
-            return true
-        }
-
-        false
-    }
-
-    fn is_str(&self) -> bool {
-        if let Str(_) = self {
-            return true
-        }
-
-        false
-    }
-
-    fn is_func(&self) -> bool {
-        if let Func(_) = self {
-            return true
+            return true;
         }
 
         false
@@ -699,40 +527,16 @@ impl Cell {
         match self {
             Str(addr) => Some(*addr),
             Ref(addr) => Some(*addr),
-            Func(_) => None
+            Func(_) => None,
         }
     }
 }
 
 impl Store {
-    fn is_heap(&self) -> bool {
-        if let HeapAddr(_) = self {
-            return true
-        }
-
-        false
-    }
-
-    fn is_x(&self) -> bool {
-        if let Store::Register(Register::X(_)) = self {
-            return true
-        }
-
-        false
-    }
-
-    fn is_y(&self) -> bool {
-        if let Store::Register(Register::Y(_)) = self {
-            return true
-        }
-
-        false
-    }
-
     fn address(&self) -> usize {
         match self {
             HeapAddr(addr) => *addr,
-            Store::Register(r) => r.address()
+            Store::Register(r) => r.address(),
         }
     }
 }
@@ -741,13 +545,18 @@ impl Code {
     fn new() -> Self {
         Code {
             code_area: Vec::new(),
-            code_address: HashMap::new()
+            code_address: HashMap::new(),
         }
     }
 }
 
-// TODO: make this iterative
-fn allocate_query_registers(compound: &Compound, x: &mut usize, m: &mut TermMap, seen: &mut TermSet, instructions: &mut Instructions) {
+fn allocate_query_registers(
+    compound: &Compound,
+    x: &mut usize,
+    m: &mut TermMap,
+    seen: &mut TermSet,
+    instructions: &mut Instructions,
+) {
     let term = Term::Compound(compound.clone());
 
     if !m.contains_key(&term) {
@@ -784,8 +593,15 @@ fn allocate_query_registers(compound: &Compound, x: &mut usize, m: &mut TermMap,
     }
 }
 
-// TODO: make this iterative
-fn allocate_program_registers(root: bool, compound: &Compound, x: &mut usize, m: &mut TermMap, seen: &mut TermSet, arg_instructions: &mut Instructions, instructions: &mut Instructions) {
+fn allocate_program_registers(
+    root: bool,
+    compound: &Compound,
+    x: &mut usize,
+    m: &mut TermMap,
+    seen: &mut TermSet,
+    arg_instructions: &mut Instructions,
+    instructions: &mut Instructions,
+) {
     let term = Term::Compound(compound.clone());
 
     if !m.contains_key(&term) {
@@ -859,16 +675,29 @@ fn compile_query<T: Structuralize>(term: &T, m: &mut TermMap, seen: &mut TermSet
         } else {
             m.insert(arg.clone(), X(a));
             seen.insert(arg.clone());
-            allocate_query_registers(&arg.structuralize().unwrap(), &mut x, m, seen, &mut instructions);
+            allocate_query_registers(
+                &arg.structuralize().unwrap(),
+                &mut x,
+                m,
+                seen,
+                &mut instructions,
+            );
         }
     }
 
-    instructions.push(Instruction::Call(Functor(compound.name.clone(), compound.arity)));
+    instructions.push(Instruction::Call(Functor(
+        compound.name.clone(),
+        compound.arity,
+    )));
 
     instructions
 }
 
-fn compile_fact<T: Structuralize>(term: &T, m: &mut TermMap, seen: &mut HashSet<Term>) -> Instructions {
+fn compile_fact<T: Structuralize>(
+    term: &T,
+    m: &mut TermMap,
+    seen: &mut HashSet<Term>,
+) -> Instructions {
     let mut arg_instructions = Vec::new();
     let mut instructions = Vec::new();
 
@@ -894,7 +723,15 @@ fn compile_fact<T: Structuralize>(term: &T, m: &mut TermMap, seen: &mut HashSet<
         } else {
             m.insert(arg.clone(), X(a));
             seen.insert(arg.clone());
-            allocate_program_registers(true, &arg.structuralize().unwrap(), &mut x, m, seen, &mut arg_instructions, &mut instructions);
+            allocate_program_registers(
+                true,
+                &arg.structuralize().unwrap(),
+                &mut x,
+                m,
+                seen,
+                &mut arg_instructions,
+                &mut instructions,
+            );
         }
     }
 
@@ -909,7 +746,7 @@ fn find_variables(term: &Term, vars: &mut Vec<Var>) {
         for arg in &c.args {
             if let Term::Var(v) = arg {
                 vars.push(v.clone());
-            } else if let Term::Compound(Compound {name, arity, .. }) = arg {
+            } else if let Term::Compound(Compound { name, arity, .. }) = arg {
                 if *arity > 0 {
                     find_variables(arg, vars);
                 }
@@ -953,14 +790,15 @@ fn collect_permanent_variables(rule: &Rule) -> TermMap {
 
     for body_var in &vars {
         match counts.get(body_var).cloned() {
-            Some(c) => counts.insert(body_var.clone(), c+1),
-            None => counts.insert(body_var.clone(), 1)
+            Some(c) => counts.insert(body_var.clone(), c + 1),
+            None => counts.insert(body_var.clone(), 1),
         };
     }
 
-    let vars: Vec<Term> = counts.iter()
-        .filter(|(v,c)| **c > 1)
-        .map(|(v,c)| Term::Var(v.clone()))
+    let vars: Vec<Term> = counts
+        .iter()
+        .filter(|(v, c)| **c > 1)
+        .map(|(v, c)| Term::Var(v.clone()))
         .collect();
 
     find_variables(&head, &mut all_vars);
@@ -981,7 +819,7 @@ fn collect_permanent_variables(rule: &Rule) -> TermMap {
     let mut vars = HashMap::new();
 
     for (i, term) in temp.iter().enumerate() {
-        vars.insert(term.clone(), Y(i+1));
+        vars.insert(term.clone(), Y(i + 1));
     }
 
     vars
@@ -997,7 +835,7 @@ fn compile_rule(rule: &Rule, m: &mut TermMap, seen: &mut TermSet) -> Instruction
     let Rule { head: term, body } = rule;
     let head = Term::Compound(term.clone());
     let head_instructions = compile_fact(&head, m, seen);
-    let head_slice = &head_instructions[..head_instructions.len()-1];
+    let head_slice = &head_instructions[..head_instructions.len() - 1];
 
     let mut head_instructions = vec![Instruction::Allocate(n)];
     head_instructions.extend_from_slice(head_slice);
@@ -1010,9 +848,8 @@ fn compile_rule(rule: &Rule, m: &mut TermMap, seen: &mut TermSet) -> Instruction
     body_instructions.push(Instruction::Deallocate);
     head_instructions.extend(instructions);
     head_instructions.extend(body_instructions);
-    let instructions = head_instructions;
 
-    instructions
+    head_instructions
 }
 
 pub fn query(m: &mut Machine, q: &str) -> HashMap<Cell, Term> {
@@ -1021,7 +858,7 @@ pub fn query(m: &mut Machine, q: &str) -> HashMap<Cell, Term> {
     let mut seen = HashSet::new();
     let mut map = HashMap::new();
 
-    if let t@Term::Compound(_) | t@Term::Atom(_) = &mut query {
+    if let t @ Term::Compound(_) | t @ Term::Atom(_) = &mut query {
         let instructions = compile_query(t, &mut map, &mut seen);
         let mut output = HashMap::new();
 
@@ -1066,8 +903,8 @@ pub fn run_query(m: &mut Machine, q: &str, p: &str) -> (QueryBindings, ProgramBi
                         query_bindings.push(format!("{} = {}", term, buffer));
                     }
                 }
-            },
-            _ => ()
+            }
+            _ => (),
         }
     }
 
@@ -1086,11 +923,10 @@ pub fn run_query(m: &mut Machine, q: &str, p: &str) -> (QueryBindings, ProgramBi
                         if !query_bindings.contains(&program_binding) {
                             program_bindings.push(format!("{} = {}", term, buffer));
                         }
-
                     }
                 }
-            },
-            _ => ()
+            }
+            _ => (),
         }
     }
 
@@ -1105,7 +941,7 @@ pub fn program(m: &mut Machine, p: &str) -> HashMap<Cell, Term> {
     let mut program = e.parse(p).unwrap();
     let mut map = HashMap::new();
 
-    if let t@Term::Compound(_) | t@Term::Atom(_) = &mut program {
+    if let t @ Term::Compound(_) | t @ Term::Atom(_) = &mut program {
         let mut seen = HashSet::new();
         let instructions = compile_fact(t, &mut map, &mut seen);
         let mut output = HashMap::new();
@@ -1129,10 +965,14 @@ pub fn program(m: &mut Machine, p: &str) -> HashMap<Cell, Term> {
     }
 }
 
-pub fn resolve_term(m: &Machine, addr: HeapAddress, display_map: &[(Cell, Term)], term_string: &mut String) {
+pub fn resolve_term(
+    m: &Machine,
+    addr: HeapAddress,
+    display_map: &[(Cell, Term)],
+    term_string: &mut String,
+) {
     let d = m.deref(Store::HeapAddr(addr));
     let cell = m.get_store_cell(d);
-
 
     match cell {
         Cell::Func(Functor(name, arity)) => {
@@ -1153,10 +993,8 @@ pub fn resolve_term(m: &Machine, addr: HeapAddress, display_map: &[(Cell, Term)]
             if *arity > 0 {
                 term_string.push_str(")");
             }
-        },
-        Cell::Str(a) => {
-            resolve_term(&m, *a, display_map, term_string)
-        },
+        }
+        Cell::Str(a) => resolve_term(&m, *a, display_map, term_string),
         Cell::Ref(r) => {
             if *r == d.address() {
                 for (cell, term) in display_map {
@@ -1177,7 +1015,6 @@ pub fn resolve_term(m: &Machine, addr: HeapAddress, display_map: &[(Cell, Term)]
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -1232,13 +1069,7 @@ mod tests {
         m.set_variable(X(3));
         m.set_value(X(2));
 
-        let expected_heap_cells = vec![
-            Str(1),
-            Cell::from("foo/2"),
-            Ref(2),
-            Ref(3),
-            Ref(2)
-        ];
+        let expected_heap_cells = vec![Str(1), Cell::from("foo/2"), Ref(2), Ref(3), Ref(2)];
 
         let heap_cells = &m.heap;
 
@@ -1260,7 +1091,7 @@ mod tests {
             Ref(3),
             Str(5),
             Cell::from("f/2"),
-            Ref(3)
+            Ref(3),
         ];
 
         m.insert_x(3, Ref(4));
@@ -1288,7 +1119,6 @@ mod tests {
         m.set_value(X(2));
         m.set_value(X(3));
         m.set_value(X(4));
-
 
         let expected_heap_cells = vec![
             Str(1),
@@ -1362,13 +1192,11 @@ mod tests {
             Cell::from("f/1"),
             Str(19),
             Str(19),
-            Cell::from("a/0")
+            Cell::from("a/0"),
         ];
-
 
         let heap_cells = &m.heap;
         assert_eq!(heap_cells, &expected_heap_cells);
-
 
         register_is(&m, X(1), Str(8));
         register_is(&m, X(2), Ref(2));
@@ -1390,7 +1218,7 @@ mod tests {
             Instruction::SetVariable(X(5)),
             Instruction::PutStructure(Functor::from("f/1"), X(3)),
             Instruction::SetValue(X(5)),
-            Instruction::Call(Functor::from("p/3"))
+            Instruction::Call(Functor::from("p/3")),
         ];
 
         let mut p = e.parse("p(Z, h(Z, W), f(W)).").unwrap();
@@ -1415,7 +1243,7 @@ mod tests {
             Instruction::GetStructure(Functor::from("f/1"), X(6)),
             Instruction::UnifyVariable(X(7)),
             Instruction::GetStructure(Functor::from("a/0"), X(7)),
-            Instruction::Proceed
+            Instruction::Proceed,
         ];
 
         let mut p = e.parse("p(f(X), h(Y, f(a)), Y).").unwrap();
@@ -1440,7 +1268,7 @@ mod tests {
             Instruction::SetVariable(X(5)),
             Instruction::SetValue(X(6)),
             Instruction::PutValue(X(5), X(3)),
-            Instruction::Call(Functor::from("p/3"))
+            Instruction::Call(Functor::from("p/3")),
         ];
 
         let expected_program_instructions = vec![
@@ -1450,7 +1278,7 @@ mod tests {
             Instruction::UnifyVariable(X(5)),
             Instruction::GetStructure(Functor::from("f/1"), X(3)),
             Instruction::UnifyValue(X(5)),
-            Instruction::Proceed
+            Instruction::Proceed,
         ];
 
         let mut q = e.parse("p(f(X), h(Y, f(a)), Y).").unwrap();
@@ -1471,14 +1299,13 @@ mod tests {
     fn test_query_execution_2_6() {
         let mut m = Machine::new();
 
-
         m.put_variable(X(4), X(1));
         m.put_structure(Functor::from("h/2"), X(2));
         m.set_value(X(4));
         m.set_variable(X(5));
         m.put_structure(Functor::from("f/1"), X(3));
         m.set_value(X(5));
-//        m.call(Functor::from("p/3"));
+        //        m.call(Functor::from("p/3"));
 
         let expected_heap_cells = vec![
             Ref(0),
@@ -1488,11 +1315,11 @@ mod tests {
             Ref(4),
             Str(6),
             Cell::from("f/1"),
-            Ref(4)
+            Ref(4),
         ];
 
-        let heap_cells = m.get_heap();
-        assert_eq!(heap_cells, &expected_heap_cells);
+        let heap_cells = m.heap;
+        assert_eq!(&heap_cells, &expected_heap_cells);
     }
 
     #[test]
@@ -1505,7 +1332,7 @@ mod tests {
         m.set_variable(X(5));
         m.put_structure(Functor::from("f/1"), X(3));
         m.set_value(X(5));
-//        m.call(Functor::from("p/3"));
+        //        m.call(Functor::from("p/3"));
 
         m.get_structure(Functor::from("f/1"), X(1));
         m.unify_variable(X(4));
@@ -1534,13 +1361,11 @@ mod tests {
             Cell::from("f/1"),
             Str(15),
             Str(15),
-            Cell::from("a/0")
+            Cell::from("a/0"),
         ];
-
 
         let heap_cells = &m.heap;
         assert_eq!(heap_cells, &expected_heap_cells);
-
 
         register_is(&m, X(1), Ref(0));
         register_is(&m, X(2), Str(2));
@@ -1557,23 +1382,25 @@ mod tests {
             name: "p".to_string(),
             arity: 3,
             args: vec![
-                Term::Compound(Compound { name: "f".to_string(), arity: 1, args: vec![Term::Var(Var("X".to_string()))] }),
-                Term::Compound(
-                    Compound {
-                        name: "h".to_string(),
-                        arity: 2,
-                        args: vec![
-                            Term::Var(Var("Y".to_string())),
-                            Term::Compound(Compound {
-                                name: "f".to_string(),
-                                arity: 1,
-                                args: vec![Term::Atom(Atom("a".to_string()))]
-                            })
-                        ]
-                    }
-                ),
-                Term::Var(Var("Y".to_string()))
-            ]
+                Term::Compound(Compound {
+                    name: "f".to_string(),
+                    arity: 1,
+                    args: vec![Term::Var(Var("X".to_string()))],
+                }),
+                Term::Compound(Compound {
+                    name: "h".to_string(),
+                    arity: 2,
+                    args: vec![
+                        Term::Var(Var("Y".to_string())),
+                        Term::Compound(Compound {
+                            name: "f".to_string(),
+                            arity: 1,
+                            args: vec![Term::Atom(Atom("a".to_string()))],
+                        }),
+                    ],
+                }),
+                Term::Var(Var("Y".to_string())),
+            ],
         };
 
         let p = Compound {
@@ -1581,26 +1408,20 @@ mod tests {
             arity: 3,
             args: vec![
                 Term::Var(Var("Z".to_string())),
-                Term::Compound(
-                    Compound {
-                        name: "h".to_string(),
-                        arity: 2,
-                        args: vec![
-                            Term::Var(Var("Z".to_string())),
-                            Term::Var(Var("W".to_string()))
-                        ]
-                    }
-                ),
-                Term::Compound(
-                    Compound {
-                        name: "f".to_string(),
-                        arity: 1,
-                        args: vec![
-                            Term::Var(Var("W".to_string()))
-                        ]
-                    }
-                )
-            ]
+                Term::Compound(Compound {
+                    name: "h".to_string(),
+                    arity: 2,
+                    args: vec![
+                        Term::Var(Var("Z".to_string())),
+                        Term::Var(Var("W".to_string())),
+                    ],
+                }),
+                Term::Compound(Compound {
+                    name: "f".to_string(),
+                    arity: 1,
+                    args: vec![Term::Var(Var("W".to_string()))],
+                }),
+            ],
         };
 
         let expected_query_instructions = vec![
@@ -1613,7 +1434,7 @@ mod tests {
             Instruction::SetVariable(X(5)),
             Instruction::SetValue(X(6)),
             Instruction::PutValue(X(5), X(3)),
-            Instruction::Call(Functor::from("p/3"))
+            Instruction::Call(Functor::from("p/3")),
         ];
 
         let expected_program_instructions = vec![
@@ -1623,7 +1444,7 @@ mod tests {
             Instruction::UnifyVariable(X(5)),
             Instruction::GetStructure(Functor::from("f/1"), X(3)),
             Instruction::UnifyValue(X(5)),
-            Instruction::Proceed
+            Instruction::Proceed,
         ];
 
         let mut query_seen = HashSet::new();
@@ -1645,26 +1466,20 @@ mod tests {
             arity: 3,
             args: vec![
                 Term::Var(Var("Z".to_string())),
-                Term::Compound(
-                    Compound {
-                        name: "h".to_string(),
-                        arity: 2,
-                        args: vec![
-                            Term::Var(Var("Z".to_string())),
-                            Term::Var(Var("W".to_string()))
-                        ]
-                    }
-                ),
-                Term::Compound(
-                    Compound {
-                        name: "f".to_string(),
-                        arity: 1,
-                        args: vec![
-                            Term::Var(Var("W".to_string()))
-                        ]
-                    }
-                )
-            ]
+                Term::Compound(Compound {
+                    name: "h".to_string(),
+                    arity: 2,
+                    args: vec![
+                        Term::Var(Var("Z".to_string())),
+                        Term::Var(Var("W".to_string())),
+                    ],
+                }),
+                Term::Compound(Compound {
+                    name: "f".to_string(),
+                    arity: 1,
+                    args: vec![Term::Var(Var("W".to_string()))],
+                }),
+            ],
         };
 
         let expected_query_instructions = vec![
@@ -1674,7 +1489,7 @@ mod tests {
             Instruction::SetVariable(X(5)),
             Instruction::PutStructure(Functor::from("f/1"), X(3)),
             Instruction::SetValue(X(5)),
-            Instruction::Call(Functor::from("p/3"))
+            Instruction::Call(Functor::from("p/3")),
         ];
 
         let mut seen = HashSet::new();
@@ -1690,31 +1505,25 @@ mod tests {
             name: "p".to_string(),
             arity: 3,
             args: vec![
-                Term::Compound(
-                    Compound {
-                        name: "f".to_string(),
-                        arity: 1,
-                        args: vec![Term::Var(Var("X".to_string()))]
-                    }
-                ),
-                Term::Compound(
-                    Compound {
-                        name: "h".to_string(),
-                        arity: 2,
-                        args: vec![
-                            Term::Var(Var("Y".to_string())),
-                            Term::Compound(
-                                Compound {
-                                    name: "f".to_string(),
-                                    arity: 1,
-                                    args: vec![Term::Atom(Atom("a".to_string()))]
-                                }
-                            ),
-                        ]
-                    }
-                ),
-                Term::Var(Var("Y".to_string()))
-            ]
+                Term::Compound(Compound {
+                    name: "f".to_string(),
+                    arity: 1,
+                    args: vec![Term::Var(Var("X".to_string()))],
+                }),
+                Term::Compound(Compound {
+                    name: "h".to_string(),
+                    arity: 2,
+                    args: vec![
+                        Term::Var(Var("Y".to_string())),
+                        Term::Compound(Compound {
+                            name: "f".to_string(),
+                            arity: 1,
+                            args: vec![Term::Atom(Atom("a".to_string()))],
+                        }),
+                    ],
+                }),
+                Term::Var(Var("Y".to_string())),
+            ],
         };
 
         let expected_program_instructions = vec![
@@ -1727,7 +1536,7 @@ mod tests {
             Instruction::GetStructure(Functor::from("f/1"), X(6)),
             Instruction::UnifyVariable(X(7)),
             Instruction::GetStructure(Functor::from("a/0"), X(7)),
-            Instruction::Proceed
+            Instruction::Proceed,
         ];
 
         let mut seen = HashSet::new();
@@ -1744,16 +1553,18 @@ mod tests {
             arity: 2,
             args: vec![
                 Term::Atom(Atom("a".to_string())),
-                Term::Atom(Atom("b".to_string()))
-            ]});
+                Term::Atom(Atom("b".to_string())),
+            ],
+        });
 
         let fact2 = Term::Compound(Compound {
             name: "r".to_string(),
             arity: 2,
             args: vec![
                 Term::Atom(Atom("b".to_string())),
-                Term::Atom(Atom("c".to_string()))
-            ]});
+                Term::Atom(Atom("c".to_string())),
+            ],
+        });
 
         let r = Rule {
             head: Compound {
@@ -1761,36 +1572,39 @@ mod tests {
                 arity: 2,
                 args: vec![
                     Term::Var(Var("X".to_string())),
-                    Term::Var(Var("Y".to_string()))
-                ]},
+                    Term::Var(Var("Y".to_string())),
+                ],
+            },
             body: vec![
                 Compound {
                     name: "q".to_string(),
                     arity: 2,
                     args: vec![
                         Term::Var(Var("X".to_string())),
-                        Term::Var(Var("Z".to_string()))
-                    ]},
+                        Term::Var(Var("Z".to_string())),
+                    ],
+                },
                 Compound {
                     name: "r".to_string(),
                     arity: 2,
                     args: vec![
                         Term::Var(Var("Z".to_string())),
-                        Term::Var(Var("Y".to_string()))
-                    ]},
-            ]
+                        Term::Var(Var("Y".to_string())),
+                    ],
+                },
+            ],
         };
 
         let expected_fact1_instructions = vec![
             Instruction::GetStructure(Functor::from("a/0"), X(1)),
             Instruction::GetStructure(Functor::from("b/0"), X(2)),
-            Instruction::Proceed
+            Instruction::Proceed,
         ];
 
         let expected_fact2_instructions = vec![
             Instruction::GetStructure(Functor::from("b/0"), X(1)),
             Instruction::GetStructure(Functor::from("c/0"), X(2)),
-            Instruction::Proceed
+            Instruction::Proceed,
         ];
 
         let expected_rule_instructions = vec![
@@ -1803,11 +1617,11 @@ mod tests {
             Instruction::PutValue(Y(2), X(1)),
             Instruction::PutValue(Y(1), X(2)),
             Instruction::Call(Functor::from("r/2")),
-            Instruction::Deallocate
+            Instruction::Deallocate,
         ];
 
         let mut m = HashMap::new();
-        let mut seen= HashSet::new();
+        let mut seen = HashSet::new();
 
         let rule_instructions = compile_rule(&r, &mut m, &mut seen);
         let fact1_instructions = compile_fact(&fact1, &mut m, &mut seen);
@@ -1821,7 +1635,6 @@ mod tests {
         assert_eq!(&expected_rule_instructions, &rule_instructions);
 
         let mut machine = Machine::new();
-
 
         machine.push_instructions(&r_functor, &rule_instructions);
         machine.push_instructions(&f1_functor, &fact1_instructions);
@@ -1839,25 +1652,25 @@ mod tests {
     fn test_unify_variable_read_mode() {
         let mut m = Machine::new();
 
-        m.set_mode(Read);
-        m.push_heap(Ref(3));
+        m.mode = Read;
+        m.heap.push(Ref(3));
         m.unify_variable(X(1));
 
         assert_eq!(m.get_x(1).cloned().unwrap(), Ref(3));
-        assert_eq!(m.get_s(), 1);
+        assert_eq!(m.registers.s, 1);
     }
 
     #[test]
     fn test_unify_variable_write_mode() {
         let mut m = Machine::new();
 
-        m.set_mode(Write);
+        m.mode = Write;
         m.unify_variable(X(1));
 
         assert_eq!(m.heap[0], Ref(0));
         assert_eq!(m.get_x(1).cloned().unwrap(), Ref(0));
-        assert_eq!(m.get_h(), 1);
-        assert_eq!(m.get_s(), 1);
+        assert_eq!(m.registers.h, 1);
+        assert_eq!(m.registers.s, 1);
     }
 
     #[test]
@@ -1876,17 +1689,25 @@ mod tests {
 
     #[test]
     fn test_compound_structure_rendering() {
-        let t = Term::Compound( Compound {
+        let t = Term::Compound(Compound {
             name: String::from("foo"),
             arity: 2,
-            args: vec![Term::Atom(Atom("bar".to_string())), Term::Atom(Atom("baz".to_string()))]});
+            args: vec![
+                Term::Atom(Atom("bar".to_string())),
+                Term::Atom(Atom("baz".to_string())),
+            ],
+        });
 
         assert_eq!(t.to_string(), "foo(bar, baz)");
     }
 
     #[test]
     fn test_atomic_structure_rendering() {
-        let t = Term::Compound( Compound { name: String::from("bar"), arity: 0, args: Vec::new() });
+        let t = Term::Compound(Compound {
+            name: String::from("bar"),
+            arity: 0,
+            args: Vec::new(),
+        });
 
         assert_eq!(t.to_string(), "bar");
     }
@@ -1917,9 +1738,9 @@ mod tests {
         assert!(number_parser.parse("2").is_ok());
         assert!(number_parser.parse("42").is_ok());
         assert!(number_parser.parse("34345354").is_ok());
-//    assert!(number_parser.parse("3.3").is_ok());
-//    assert!(number_parser.parse("3.30").is_ok());
-//    assert!(number_parser.parse("0.3").is_ok());
+        //    assert!(number_parser.parse("3.3").is_ok());
+        //    assert!(number_parser.parse("3.30").is_ok());
+        //    assert!(number_parser.parse("0.3").is_ok());
         assert!(number_parser.parse("a03").is_err());
         assert!(number_parser.parse("_21").is_err());
         assert!(number_parser.parse("2_12").is_err());
@@ -1961,7 +1782,7 @@ mod tests {
             Instruction::SetVariable(X(5)),
             Instruction::PutStructure(Functor::from("f/1"), X(3)),
             Instruction::SetValue(X(5)),
-            Instruction::Call(Functor::from("p/3"))
+            Instruction::Call(Functor::from("p/3")),
         ];
 
         let mut q = e.parse("p(Z, h(Z, W), f(W)).").unwrap();
