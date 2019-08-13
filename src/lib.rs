@@ -14,6 +14,7 @@ use lalrpop_util::lalrpop_mod;
 use log::Level::*;
 use log::{debug, error, info, trace, warn, Level};
 use std::cmp::Ordering;
+use std::collections::hash_set::Iter;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
@@ -80,10 +81,16 @@ enum Mode {
     Write,
 }
 
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+enum CodeType {
+    Query(Functor),
+    Fact(Functor),
+}
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 struct Code {
     code_area: Instructions,
-    code_address: HashMap<Functor, usize>,
+    code_address: HashMap<CodeType, usize>,
 }
 
 // Environment stack frames
@@ -181,14 +188,39 @@ impl Machine {
             Instruction::GetVariable(x, a) => self.get_variable(*x, *a),
             Instruction::Allocate(n) => self.allocate(*n),
             Instruction::Deallocate => self.deallocate(),
-            Instruction::Call(f) => self.call(f),
+            Instruction::Call(f) => self.call(&CodeType::Fact(f.clone())),
             Instruction::Proceed => self.proceed(),
         }
     }
 
-    fn execute(&mut self, instructions: &[Instruction]) {
-        for instruction in instructions {
-            self.execute_instruction(instruction)
+    fn execute(&mut self, code: &CodeType) {
+        match code {
+            c @ CodeType::Query(_) => {
+                let a = *self.code.code_address.get(c).unwrap();
+                let instructions = self.code.code_area.clone();
+
+                for instruction in &instructions[a..] {
+                    if let Instruction::Call(_) = instruction {
+                        self.execute_instruction(instruction);
+                        break;
+                    } else {
+                        self.execute_instruction(instruction);
+                    }
+                }
+            }
+            c @ CodeType::Fact(_) => {
+                let a = *self.code.code_address.get(c).unwrap();
+                let instructions = self.code.code_area.clone();
+
+                for instruction in &instructions[a..] {
+                    if let Instruction::Proceed = instruction {
+                        self.execute_instruction(instruction);
+                        break;
+                    } else {
+                        self.execute_instruction(instruction);
+                    }
+                }
+            }
         }
     }
 
@@ -196,24 +228,20 @@ impl Machine {
         self.code.code_area.push(instruction);
     }
 
-    fn push_instructions(&mut self, fact: &Functor, instructions: &[Instruction]) {
-        self.push_code_address(fact);
+    fn push_instructions(&mut self, code: &CodeType, instructions: &[Instruction]) {
+        self.push_code_address(code);
         for instruction in instructions {
             self.push_instruction(instruction.clone());
         }
     }
 
-    pub fn get_code(&self) -> &Instructions {
-        &self.code.code_area
-    }
-
-    fn push_code_address(&mut self, fact: &Functor) {
+    fn push_code_address(&mut self, code: &CodeType) {
         let a = self.code.code_area.len();
-        self.code.code_address.insert(fact.clone(), a);
+        self.code.code_address.insert(code.clone(), a);
     }
 
-    fn get_code_address(&self, fact: &Functor) -> usize {
-        *self.code.code_address.get(fact).unwrap()
+    fn get_code_address(&self, code: &CodeType) -> usize {
+        *self.code.code_address.get(code).unwrap()
     }
 
     pub fn allocate(&mut self, n: usize) {}
@@ -317,7 +345,7 @@ impl Machine {
         }
     }
 
-    fn call(&mut self, f: &Functor) {
+    fn call(&mut self, f: &CodeType) {
         let a = self.get_code_address(f);
         let p = self.registers.p;
         self.registers.cp = p + 1;
@@ -673,11 +701,7 @@ fn compile_query<T: Structuralize>(term: &T, m: &mut TermMap, seen: &mut TermSet
     instructions
 }
 
-fn compile_fact<T: Structuralize>(
-    term: &T,
-    m: &mut TermMap,
-    seen: &mut HashSet<Term>,
-) -> Instructions {
+fn compile_fact<T: Structuralize>(term: &T, m: &mut TermMap, seen: &mut TermSet) -> Instructions {
     let mut arg_instructions = Vec::new();
     let mut instructions = Vec::new();
 
@@ -832,55 +856,44 @@ fn compile_rule(rule: &Rule, m: &mut TermMap, seen: &mut TermSet) -> Instruction
     head_instructions
 }
 
-pub fn resolve_term(
-    m: &Machine,
-    addr: HeapAddress,
-    display_map: &[(Cell, Term)],
-    term_string: &mut String,
-) {
-    let d = m.deref(Store::HeapAddr(addr));
-    let cell = m.get_store_cell(d);
+pub fn compare_terms(query_term: &Term, program_term: &Term, mappings: &mut HashMap<Term, Term>) {
+    match (query_term, program_term) {
+        (q @ Term::Var(_), p @ Term::Var(_)) => {
+            mappings.insert(q.clone(), q.clone());
+        }
+        (q @ Term::Var(_), p @ Term::Compound(_)) => {
+            mappings.insert(q.clone(), p.clone());
+        }
+        (q @ Term::Var(_), p @ Term::Atom(_)) => {
+            mappings.insert(q.clone(), p.clone());
+        }
+        (q @ Term::Compound(_), p @ Term::Var(_)) => (),
+        (Term::Compound(q), Term::Compound(p)) => {
+            let q_args = q.args.iter();
+            let p_args = p.args.iter();
+            let arg_pairs = q_args.zip(p_args);
 
-    match cell {
-        Cell::Func(Functor(name, arity)) => {
-            if *arity == 0 {
-                term_string.push_str(name);
-            } else {
-                term_string.push_str(&format!("{}(", name));
-            }
-
-            for i in 1..=*arity {
-                resolve_term(&m, d.address() + i, display_map, term_string);
-
-                if i != *arity {
-                    term_string.push_str(", ");
-                }
-            }
-
-            if *arity > 0 {
-                term_string.push_str(")");
+            for (q_arg, p_arg) in arg_pairs {
+                compare_terms(q_arg, p_arg, mappings);
             }
         }
-        Cell::Str(a) => resolve_term(&m, *a, display_map, term_string),
-        Cell::Ref(r) => {
-            if *r == d.address() {
-                for (cell, term) in display_map {
-                    if let Ref(a) = cell {
-                        if *a == *r {
-                            if let Term::Var(_) = term {
-                                let s = format!("{}", term);
+        (Term::Compound(q), Term::Atom(p)) => (),
+        _ => panic!("unsupported term comparison"),
+    };
+}
 
-                                term_string.push_str(&s);
-                                break;
-                            }
-                        }
-                    }
-                }
-            } else {
-                resolve_term(&m, *r, display_map, term_string);
-            }
-        }
+pub fn find_solutions(query_args: &[Term], program_args: &[Term]) -> HashMap<Term, Term> {
+    let query_terms = query_args.iter();
+    let program_terms = program_args.iter();
+    let terms = query_terms.zip(program_terms);
+
+    let mut mappings = HashMap::new();
+
+    for (query_term, program_term) in terms {
+        compare_terms(&query_term, &program_term, &mut mappings);
     }
+
+    mappings
 }
 
 #[cfg(test)]
@@ -890,7 +903,10 @@ mod tests {
     #[test]
     fn test_exercise_2_1() {
         let mut machine = Machine::new();
-        machine.execute(&figure_2_3_instructions());
+
+        for instruction in &figure_2_3_instructions() {
+            machine.execute_instruction(instruction);
+        }
 
         assert!(!machine.fail);
         assert_eq!(
@@ -919,11 +935,17 @@ mod tests {
     fn test_exercise_2_3() {
         let mut machine = Machine::new();
 
-        machine.execute(&figure_2_3_instructions());
+        for instruction in &figure_2_3_instructions() {
+            machine.execute_instruction(instruction);
+        }
+
         let w = machine.deref(Register(X(5)));
         let z = machine.deref(Register(X(2)));
 
-        machine.execute(&figure_2_4_instructions());
+        for instruction in &figure_2_4_instructions() {
+            machine.execute_instruction(instruction);
+        }
+
         let x = machine.deref(Register(X(5)));
         let y = machine.deref(Register(X(4)));
         let show = |store| show_cell(&machine, store);
@@ -970,6 +992,60 @@ mod tests {
             Instruction::GetStructure(Functor::from("f/1"), X(4)),
             Instruction::UnifyValue(X(5)),
         ];
+    }
+
+    #[test]
+    fn test_exercise_2_5() {
+        let mut machine = Machine::new();
+        let parser = parser::ExpressionParser::new();
+        let query = parser.parse("p(f(X), h(Y, f(a)), Y).").unwrap();
+        let program = parser.parse("p(Z, h(Z, W), f(W)).").unwrap();
+
+        let mut query_allocation = TermMap::new();
+        let mut query_set = TermSet::new();
+        let mut program_allocation = TermMap::new();
+        let mut program_set = TermSet::new();
+
+        let query_instructions = compile_query(&query, &mut query_allocation, &mut query_set);
+        let program_instructions =
+            compile_fact(&program, &mut program_allocation, &mut program_set);
+
+        machine.push_instructions(&CodeType::Query(Functor::from("p/3")), &query_instructions);
+        machine.push_instructions(&CodeType::Fact(Functor::from("p/3")), &program_instructions);
+        machine.execute(&CodeType::Query(Functor::from("p/3")));
+        machine.execute(&CodeType::Fact(Functor::from("p/3")));
+
+        let query_tree = query.structuralize().unwrap();
+        let program_tree = program.structuralize().unwrap();
+        let query_args = &query_tree.args;
+        let program_args = &program_tree.args;
+
+        let program_args: Vec<_> = program_args
+            .iter()
+            .map(|t| {
+                if !program_allocation.contains_key(t) {
+                    t.clone()
+                } else {
+                    let mut s = show_cell(&machine, Register(*program_allocation.get(t).unwrap()));
+                    s.push_str(".");
+                    parser.parse(&s).unwrap()
+                }
+            })
+            .collect();
+
+        let query_bindings = find_solutions(&query_args, &program_args);
+        let mut query_bindings: Vec<_> = query_bindings.iter().collect();
+        query_bindings.sort();
+        let query_bindings: Vec<_> = query_bindings
+            .iter()
+            .map(|(var, term)| format!("{} = {}", var, term))
+            .collect();
+
+        assert!(!machine.fail);
+
+        let expected_query_bindings = vec!["X = f(a)", "Y = f(f(a))"];
+
+        assert_eq!(&expected_query_bindings, &query_bindings);
     }
 
     // utility test functions
@@ -1055,13 +1131,11 @@ mod tests {
         let d = machine.get_store_cell(machine.deref(address));
 
         match d.clone() {
-            Ref(a) => {
-                if let Ref(a) = machine.heap[a] {
-                    format!("_X{}", a)
-                } else {
-                    show_cell(machine, HeapAddr(a))
-                }
-            }
+            Ref(a) => match &machine.heap[a] {
+                Ref(v) if *v == a => format!("_X{}", v),
+                r @ Ref(_) => show_cell(machine, HeapAddr(a)),
+                _ => show_cell(machine, HeapAddr(a)),
+            },
             Str(a) => {
                 let cell = Str(a);
                 let Functor(name, arity) = machine.get_functor(&cell).clone();
