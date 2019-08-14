@@ -1054,6 +1054,46 @@ mod tests {
         assert_eq!(expected_program_bindings, program_bindings);
     }
 
+    #[test]
+    fn test_exercise_2_8() {
+        let parser = parser::ExpressionParser::new();
+        let q = parser.parse("p(f(X), h(Y, f(a)), Y).").unwrap();
+        let p = parser.parse("p(Z, h(Z, W), f(W)).").unwrap();
+        let mut query_allocation = HashMap::new();
+        let mut program_allocation = HashMap::new();
+        let mut query_set = TermSet::new();
+        let mut program_set = TermSet::new();
+
+        let query_instructions = compile_query(&q, &mut query_allocation, &mut query_set);
+        let program_instructions = compile_fact(&p, &mut program_allocation, &mut program_set);
+
+        let expected_query_instructions = vec![
+            Instruction::PutStructure(Functor::from("f/1"), X(1)),
+            Instruction::SetVariable(X(4)),
+            Instruction::PutStructure(Functor::from("a/0"), X(7)),
+            Instruction::PutStructure(Functor::from("f/1"), X(6)),
+            Instruction::SetValue(X(7)),
+            Instruction::PutStructure(Functor::from("h/2"), X(2)),
+            Instruction::SetVariable(X(5)),
+            Instruction::SetValue(X(6)),
+            Instruction::PutValue(X(5), X(3)),
+            Instruction::Call(Functor::from("p/3")),
+        ];
+
+        let expected_program_instructions = vec![
+            Instruction::GetVariable(X(4), X(1)),
+            Instruction::GetStructure(Functor::from("h/2"), X(2)),
+            Instruction::UnifyValue(X(4)),
+            Instruction::UnifyVariable(X(5)),
+            Instruction::GetStructure(Functor::from("f/1"), X(3)),
+            Instruction::UnifyValue(X(5)),
+            Instruction::Proceed,
+        ];
+
+        assert_eq!(&expected_query_instructions, &query_instructions);
+        assert_eq!(&expected_program_instructions, &program_instructions);
+    }
+
     // utility test functions
 
     // Figure 2.3: Compiled code for L0 query ?- p(Z, h(Z, W), f(W)).
