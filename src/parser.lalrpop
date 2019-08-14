@@ -3,24 +3,20 @@ use crate::ast::*;
 grammar;
 
 
-pub Comma: &'input str = {
-    ","
-};
-
 pub Args: Vec<Term> = {
-    <var:Var> <c:Comma> <args:Args> => {
+    <var:Var> "," <args:Args> => {
         let mut args = args;
         args.push(Term::Var(var));
         args
     },
-    <a:Atom> <c:Comma> <args:Args> => {
+    <a:Atom> "," <args:Args> => {
         let mut args = args;
         args.push(Term::Atom(a));
         args
     },
-    <compound:Compound> <c:Comma> <args:Args> => {
+    <structure:Structure> "," <args:Args> => {
         let mut args = args;
-        args.push(Term::Compound(compound));
+        args.push(Term::Structure(structure));
         args
     },
     <v:Var> ")" => {
@@ -31,29 +27,29 @@ pub Args: Vec<Term> = {
         let args = vec![Term::Atom(a)];
         args
     },
-    <c:Compound> ")" => {
-        let args = vec![Term::Compound(c)];
+    <s:Structure> ")" => {
+        let args = vec![Term::Structure(s)];
         args
     }
 };
 
-pub Body: Vec<Compound> = {
-    <a:Atom> <c:Comma> <body:Body> => {
+pub Body: Vec<Structure> = {
+    <a:Atom> "," <body:Body> => {
         let mut body = body;
         body.push(Term::Atom(a).structuralize().unwrap());
         body
     },
-    <compound:Compound> <c:Comma> <body:Body> => {
+    <structure:Structure> "," <body:Body> => {
         let mut body = body;
-        body.push(Term::Compound(compound).structuralize().unwrap());
+        body.push(Term::Structure(structure).structuralize().unwrap());
         body
     },
     <a:Atom> "." => {
         let body = vec![Term::Atom(a).structuralize().unwrap()];
         body
     },
-    <c:Compound> "." => {
-        let body = vec![Term::Compound(c).structuralize().unwrap()];
+    <s:Structure> "." => {
+        let body = vec![Term::Structure(s).structuralize().unwrap()];
         body
     }
 };
@@ -80,7 +76,7 @@ pub FunctorName: String = {
     }
 };
 
-pub Compound: Compound = {
+pub Structure: Structure = {
     <name:FunctorName> <args:Args> => {
         let arity = args.len();
         let mut args = args;
@@ -88,14 +84,14 @@ pub Compound: Compound = {
 
         assert!(arity > 0);
 
-        Compound { name: name, arity: arity, args: args }
+        Structure { name: name, arity: arity, args: args }
     }
 };
 
 pub Expression: Term = {
     <Atom> "." => Term::Atom(<>),
     <Var> "." => Term::Var(<>),
-    <Compound> "." => Term::Compound(<>),
+    <Structure> "." => Term::Structure(<>),
     <head:Atom> ":-" <body:Body> => {
         let head = head.structuralize().unwrap();
         let mut body = body;
@@ -103,7 +99,7 @@ pub Expression: Term = {
         let rule = Rule { head: head, body: body };
         Term::Rule(rule)
     },
-    <head:Compound> ":-" <body:Body> => {
+    <head:Structure> ":-" <body:Body> => {
         let mut body = body;
         body.reverse();
         let rule = Rule { head: head, body: body };

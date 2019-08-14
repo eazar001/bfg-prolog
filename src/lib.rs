@@ -323,7 +323,6 @@ impl Machine {
 
     fn deref(&self, address: Store) -> Store {
         let mut address = address;
-        let start_address = address;
 
         loop {
             let (cell, a) = match address {
@@ -559,13 +558,13 @@ impl Code {
 }
 
 fn allocate_query_registers(
-    compound: &Compound,
+    compound: &Structure,
     x: &mut usize,
     m: &mut TermMap,
     seen: &mut TermSet,
     instructions: &mut Instructions,
 ) {
-    let term = Term::Compound(compound.clone());
+    let term = Term::Structure(compound.clone());
 
     if !m.contains_key(&term) {
         m.insert(term, X(*x));
@@ -580,13 +579,13 @@ fn allocate_query_registers(
     }
 
     for t in &compound.args {
-        if let Term::Compound(ref c) = t {
+        if let Term::Structure(ref c) = t {
             allocate_query_registers(c, x, m, seen, instructions);
         }
     }
 
     let f = Functor(compound.name.clone(), compound.arity);
-    let t = Term::Compound(compound.clone());
+    let t = Term::Structure(compound.clone());
 
     instructions.push(Instruction::PutStructure(f, *m.get(&t).unwrap()));
     seen.insert(t);
@@ -603,14 +602,14 @@ fn allocate_query_registers(
 
 fn allocate_program_registers(
     root: bool,
-    compound: &Compound,
+    compound: &Structure,
     x: &mut usize,
     m: &mut TermMap,
     seen: &mut TermSet,
     arg_instructions: &mut Instructions,
     instructions: &mut Instructions,
 ) {
-    let term = Term::Compound(compound.clone());
+    let term = Term::Structure(compound.clone());
 
     if !m.contains_key(&term) {
         m.insert(term, X(*x));
@@ -625,7 +624,7 @@ fn allocate_program_registers(
     }
 
     let f = Functor(compound.name.clone(), compound.arity);
-    let t = Term::Compound(compound.clone());
+    let t = Term::Structure(compound.clone());
 
     if root {
         arg_instructions.push(Instruction::GetStructure(f, *m.get(&t).unwrap()));
@@ -652,7 +651,7 @@ fn allocate_program_registers(
     }
 
     for t in &compound.args {
-        if let Term::Compound(ref c) = t {
+        if let Term::Structure(ref c) = t {
             allocate_program_registers(false, c, x, m, seen, arg_instructions, instructions);
         }
     }
@@ -746,11 +745,11 @@ fn compile_fact<T: Structuralize>(term: &T, m: &mut TermMap, seen: &mut TermSet)
 }
 
 fn find_variables(term: &Term, vars: &mut Vec<Var>) {
-    if let Term::Compound(c) = term {
+    if let Term::Structure(c) = term {
         for arg in &c.args {
             if let Term::Var(v) = arg {
                 vars.push(v.clone());
-            } else if let Term::Compound(Compound { name, arity, .. }) = arg {
+            } else if let Term::Structure(Structure { name, arity, .. }) = arg {
                 if *arity > 0 {
                     find_variables(arg, vars);
                 }
@@ -776,11 +775,11 @@ fn collect_permanent_variables(rule: &Rule) -> TermMap {
     let Rule { head, body } = rule;
     let mut vars = Vec::new();
     let mut all_vars = Vec::new();
-    let head = Term::Compound(head.structuralize().unwrap());
+    let head = Term::Structure(head.structuralize().unwrap());
     let mut counts = HashMap::new();
 
     find_variables(&head, &mut vars);
-    find_variables(&Term::Compound(body[0].clone()), &mut vars);
+    find_variables(&Term::Structure(body[0].clone()), &mut vars);
 
     for head_var in &vars {
         counts.insert(head_var.clone(), 1);
@@ -789,7 +788,7 @@ fn collect_permanent_variables(rule: &Rule) -> TermMap {
     vars.clear();
 
     for body_term in &body[1..] {
-        find_variables(&Term::Compound(body_term.clone()), &mut vars);
+        find_variables(&Term::Structure(body_term.clone()), &mut vars);
     }
 
     for body_var in &vars {
@@ -808,7 +807,7 @@ fn collect_permanent_variables(rule: &Rule) -> TermMap {
     find_variables(&head, &mut all_vars);
 
     for body_term in body {
-        find_variables(&Term::Compound(body_term.clone()), &mut all_vars);
+        find_variables(&Term::Structure(body_term.clone()), &mut all_vars);
     }
 
     let mut perm_vars = find_variable_positions(&all_vars);
@@ -830,14 +829,14 @@ fn collect_permanent_variables(rule: &Rule) -> TermMap {
 }
 
 fn compile_rule(rule: &Rule, m: &mut TermMap, seen: &mut TermSet) -> Instructions {
-    let (mut instructions, mut body_instructions) = (Vec::new(), Vec::new());
+    let mut body_instructions = Vec::new();
     let y_map = collect_permanent_variables(rule);
     let n = y_map.len();
 
     m.extend(y_map);
 
     let Rule { head: term, body } = rule;
-    let head = Term::Compound(term.clone());
+    let head = Term::Structure(term.clone());
     let head_instructions = compile_fact(&head, m, seen);
     let head_slice = &head_instructions[..head_instructions.len() - 1];
 
@@ -850,25 +849,21 @@ fn compile_rule(rule: &Rule, m: &mut TermMap, seen: &mut TermSet) -> Instruction
     }
 
     body_instructions.push(Instruction::Deallocate);
-    head_instructions.extend(instructions);
     head_instructions.extend(body_instructions);
 
     head_instructions
 }
 
-pub fn compare_terms(query_term: &Term, program_term: &Term, mappings: &mut HashMap<Term, Term>) {
-    match (query_term, program_term) {
+pub fn compare_terms(solvent_term: &Term, other_term: &Term, mappings: &mut HashMap<Term, Term>) {
+    match (solvent_term, other_term) {
         (q @ Term::Var(_), p @ Term::Var(_)) => {
             mappings.insert(q.clone(), q.clone());
         }
-        (q @ Term::Var(_), p @ Term::Compound(_)) => {
+        (q @ Term::Var(_), p @ Term::Structure(_)) => {
             mappings.insert(q.clone(), p.clone());
         }
-        (q @ Term::Var(_), p @ Term::Atom(_)) => {
-            mappings.insert(q.clone(), p.clone());
-        }
-        (q @ Term::Compound(_), p @ Term::Var(_)) => (),
-        (Term::Compound(q), Term::Compound(p)) => {
+        (q @ Term::Structure(_), p @ Term::Var(_)) => (),
+        (Term::Structure(q), Term::Structure(p)) => {
             let q_args = q.args.iter();
             let p_args = p.args.iter();
             let arg_pairs = q_args.zip(p_args);
@@ -877,20 +872,19 @@ pub fn compare_terms(query_term: &Term, program_term: &Term, mappings: &mut Hash
                 compare_terms(q_arg, p_arg, mappings);
             }
         }
-        (Term::Compound(q), Term::Atom(p)) => (),
         _ => panic!("unsupported term comparison"),
     };
 }
 
-pub fn find_solutions(query_args: &[Term], program_args: &[Term]) -> HashMap<Term, Term> {
-    let query_terms = query_args.iter();
-    let program_terms = program_args.iter();
-    let terms = query_terms.zip(program_terms);
+pub fn find_solutions(solvent_args: &[Term], other_args: &[Term]) -> HashMap<Term, Term> {
+    let solvent_terms = solvent_args.iter();
+    let other_terms = other_args.iter();
+    let terms = solvent_terms.zip(other_terms);
 
     let mut mappings = HashMap::new();
 
-    for (query_term, program_term) in terms {
-        compare_terms(&query_term, &program_term, &mut mappings);
+    for (solvent_term, other_term) in terms {
+        compare_terms(&solvent_term, &other_term, &mut mappings);
     }
 
     mappings
@@ -1019,6 +1013,7 @@ mod tests {
         let program_tree = program.structuralize().unwrap();
         let query_args = &query_tree.args;
         let program_args = &program_tree.args;
+        let program_args_unbound = program_args.clone();
 
         let program_args: Vec<_> = program_args
             .iter()
@@ -1028,7 +1023,7 @@ mod tests {
                 } else {
                     let mut s = show_cell(&machine, Register(*program_allocation.get(t).unwrap()));
                     s.push_str(".");
-                    parser.parse(&s).unwrap()
+                    Term::Structure(parser.parse(&s).unwrap().structuralize().unwrap())
                 }
             })
             .collect();
@@ -1044,8 +1039,19 @@ mod tests {
         assert!(!machine.fail);
 
         let expected_query_bindings = vec!["X = f(a)", "Y = f(f(a))"];
+        let expected_program_bindings = vec!["W = f(a)", "Z = f(f(a))"];
 
         assert_eq!(&expected_query_bindings, &query_bindings);
+
+        let program_bindings = find_solutions(&program_args_unbound, &program_args);
+        let mut program_bindings: Vec<_> = program_bindings.iter().collect();
+        program_bindings.sort();
+        let program_bindings: Vec<_> = program_bindings
+            .iter()
+            .map(|(var, term)| format!("{} = {}", var, term))
+            .collect();
+
+        assert_eq!(expected_program_bindings, program_bindings);
     }
 
     // utility test functions
