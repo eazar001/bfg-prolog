@@ -558,39 +558,39 @@ impl Code {
 }
 
 fn allocate_query_registers(
-    compound: &Structure,
+    structure: &Structure,
     x: &mut usize,
     m: &mut TermMap,
     seen: &mut TermSet,
     instructions: &mut Instructions,
 ) {
-    let term = Term::Structure(compound.clone());
+    let term = Term::Structure(structure.clone());
 
     if !m.contains_key(&term) {
         m.insert(term, X(*x));
         *x += 1;
     }
 
-    for t in &compound.args {
+    for t in &structure.args {
         if !m.contains_key(&t) {
             m.insert(t.clone(), X(*x));
             *x += 1;
         }
     }
 
-    for t in &compound.args {
-        if let Term::Structure(ref c) = t {
-            allocate_query_registers(c, x, m, seen, instructions);
+    for t in &structure.args {
+        if let Term::Structure(ref s) = t {
+            allocate_query_registers(s, x, m, seen, instructions);
         }
     }
 
-    let f = Functor(compound.name.clone(), compound.arity);
-    let t = Term::Structure(compound.clone());
+    let f = Functor(structure.name.clone(), structure.arity);
+    let t = Term::Structure(structure.clone());
 
     instructions.push(Instruction::PutStructure(f, *m.get(&t).unwrap()));
     seen.insert(t);
 
-    for t in &compound.args {
+    for t in &structure.args {
         if !seen.contains(t) {
             instructions.push(Instruction::SetVariable(*m.get(t).unwrap()));
             seen.insert(t.clone());
@@ -602,29 +602,29 @@ fn allocate_query_registers(
 
 fn allocate_program_registers(
     root: bool,
-    compound: &Structure,
+    structure: &Structure,
     x: &mut usize,
     m: &mut TermMap,
     seen: &mut TermSet,
     arg_instructions: &mut Instructions,
     instructions: &mut Instructions,
 ) {
-    let term = Term::Structure(compound.clone());
+    let term = Term::Structure(structure.clone());
 
     if !m.contains_key(&term) {
         m.insert(term, X(*x));
         *x += 1;
     }
 
-    for t in &compound.args {
+    for t in &structure.args {
         if !m.contains_key(&t) {
             m.insert(t.clone(), X(*x));
             *x += 1;
         }
     }
 
-    let f = Functor(compound.name.clone(), compound.arity);
-    let t = Term::Structure(compound.clone());
+    let f = Functor(structure.name.clone(), structure.arity);
+    let t = Term::Structure(structure.clone());
 
     if root {
         arg_instructions.push(Instruction::GetStructure(f, *m.get(&t).unwrap()));
@@ -634,7 +634,7 @@ fn allocate_program_registers(
 
     seen.insert(t);
 
-    for t in &compound.args {
+    for t in &structure.args {
         if !seen.contains(t) {
             if root {
                 arg_instructions.push(Instruction::UnifyVariable(*m.get(t).unwrap()));
@@ -650,9 +650,9 @@ fn allocate_program_registers(
         }
     }
 
-    for t in &compound.args {
-        if let Term::Structure(ref c) = t {
-            allocate_program_registers(false, c, x, m, seen, arg_instructions, instructions);
+    for t in &structure.args {
+        if let Term::Structure(ref s) = t {
+            allocate_program_registers(false, s, x, m, seen, arg_instructions, instructions);
         }
     }
 }
@@ -660,11 +660,11 @@ fn allocate_program_registers(
 fn compile_query<T: Structuralize>(term: &T, m: &mut TermMap, seen: &mut TermSet) -> Instructions {
     let mut instructions = Vec::new();
 
-    let compound = term.structuralize().unwrap();
+    let structure = term.structuralize().unwrap();
 
-    for (i, arg) in compound.args.iter().enumerate() {
+    for (i, arg) in structure.args.iter().enumerate() {
         let a = i + 1;
-        let mut x = a + compound.arity;
+        let mut x = a + structure.arity;
 
         if let Term::Var(_) = arg {
             if !seen.contains(arg) {
@@ -693,8 +693,8 @@ fn compile_query<T: Structuralize>(term: &T, m: &mut TermMap, seen: &mut TermSet
     }
 
     instructions.push(Instruction::Call(Functor(
-        compound.name.clone(),
-        compound.arity,
+        structure.name.clone(),
+        structure.arity,
     )));
 
     instructions
@@ -704,11 +704,11 @@ fn compile_fact<T: Structuralize>(term: &T, m: &mut TermMap, seen: &mut TermSet)
     let mut arg_instructions = Vec::new();
     let mut instructions = Vec::new();
 
-    let compound = term.structuralize().unwrap();
+    let structure = term.structuralize().unwrap();
 
-    for (i, arg) in compound.args.iter().enumerate() {
+    for (i, arg) in structure.args.iter().enumerate() {
         let a = i + 1;
-        let mut x = a + compound.arity;
+        let mut x = a + structure.arity;
 
         if let Term::Var(_) = arg {
             if !seen.contains(arg) {
@@ -745,8 +745,8 @@ fn compile_fact<T: Structuralize>(term: &T, m: &mut TermMap, seen: &mut TermSet)
 }
 
 fn find_variables(term: &Term, vars: &mut Vec<Var>) {
-    if let Term::Structure(c) = term {
-        for arg in &c.args {
+    if let Term::Structure(s) = term {
+        for arg in &s.args {
             if let Term::Var(v) = arg {
                 vars.push(v.clone());
             } else if let Term::Structure(Structure { name, arity, .. }) = arg {

@@ -61,8 +61,8 @@ impl Structuralize for Structure {
         for t in &self.args {
             match t {
                 Term::Atom(a) => args.push(Term::Structure(a.structuralize().unwrap())),
-                Term::Structure(ref c) => {
-                    args.push(Term::Structure(c.structuralize().unwrap()));
+                Term::Structure(ref s) => {
+                    args.push(Term::Structure(s.structuralize().unwrap()));
                 }
                 _ => args.push(t.clone()),
             }
@@ -92,7 +92,7 @@ impl Structuralize for Term {
 
     fn name(&self) -> String {
         match self {
-            Term::Structure(c) => c.name.clone(),
+            Term::Structure(s) => s.name.clone(),
             Term::Atom(Atom(a)) => a.clone(),
             Term::Var(Var(v)) => v.clone(),
             Term::Rule(Rule { head, .. }) => head.name.clone(),
