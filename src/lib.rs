@@ -38,8 +38,7 @@ type TermMap = HashMap<Term, Register>;
 type RegisterMap = HashMap<Register, Term>;
 type TermSet = HashSet<Term>;
 type Instructions = Vec<Instruction>;
-type QueryBindings = Vec<String>;
-type ProgramBindings = Vec<String>;
+type Bindings = HashMap<Term, Term>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Instruction {
@@ -854,10 +853,18 @@ fn compile_rule(rule: &Rule, m: &mut TermMap, seen: &mut TermSet) -> Instruction
     head_instructions
 }
 
-pub fn compare_terms(solvent_term: &Term, other_term: &Term, mappings: &mut HashMap<Term, Term>) {
+pub fn compare_terms(
+    solvent_term: &Term,
+    other_term: &Term,
+    mappings: &mut Bindings,
+    unbound: &mut Bindings,
+) {
     match (solvent_term, other_term) {
         (q @ Term::Var(_), p @ Term::Var(_)) => {
-            mappings.insert(q.clone(), q.clone());
+            if unbound.contains_key(p) {
+                unbound.insert(unbound.get(p).cloned().unwrap(), q.clone());
+            }
+            unbound.insert(p.clone(), q.clone());
         }
         (q @ Term::Var(_), p @ Term::Structure(_)) => {
             mappings.insert(q.clone(), p.clone());
@@ -869,25 +876,117 @@ pub fn compare_terms(solvent_term: &Term, other_term: &Term, mappings: &mut Hash
             let arg_pairs = q_args.zip(p_args);
 
             for (q_arg, p_arg) in arg_pairs {
-                compare_terms(q_arg, p_arg, mappings);
+                compare_terms(q_arg, p_arg, mappings, unbound);
             }
         }
         _ => panic!("unsupported term comparison"),
     };
 }
 
-pub fn find_solutions(solvent_args: &[Term], other_args: &[Term]) -> HashMap<Term, Term> {
+pub fn find_solutions(solvent_args: &[Term], other_args: &[Term]) -> Bindings {
     let solvent_terms = solvent_args.iter();
     let other_terms = other_args.iter();
     let terms = solvent_terms.zip(other_terms);
 
+    let internal_var = |t| -> bool {
+        if let Term::Var(Var(ref v)) = t {
+            let mut chars: Vec<_> = v.chars().take(3).collect();
+
+            if chars.len() < 3 {
+                return false;
+            } else {
+                return chars[0] == '_'
+                    && chars[1] == 'H'
+                    && chars[2] != '0'
+                    && chars[2].is_ascii_digit();
+            }
+        }
+
+        false
+    };
+
     let mut mappings = HashMap::new();
+    let mut unbound = HashMap::new();
 
     for (solvent_term, other_term) in terms {
-        compare_terms(&solvent_term, &other_term, &mut mappings);
+        compare_terms(&solvent_term, &other_term, &mut mappings, &mut unbound);
+    }
+
+    let mut mappings: HashMap<_, _> = mappings
+        .iter()
+        .map(|(k, v)| (k.clone(), label(v.clone(), &unbound)))
+        .collect();
+
+    for (k, v) in unbound {
+        mappings.insert(k, v);
     }
 
     mappings
+        .iter()
+        .filter(|(k, v)| k != v && !(internal_var((*k).clone()) || internal_var((*v).clone())))
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect()
+}
+
+fn show_cell(machine: &Machine, address: Store) -> String {
+    let d = machine.get_store_cell(machine.deref(address));
+
+    match d.clone() {
+        Ref(a) => match &machine.heap[a] {
+            Ref(v) if *v == a => format!("_H{}", v),
+            r @ Ref(_) => show_cell(machine, HeapAddr(a)),
+            _ => show_cell(machine, HeapAddr(a)),
+        },
+        Str(a) => {
+            let cell = Str(a);
+            let Functor(name, arity) = machine.get_functor(&cell).clone();
+
+            if arity == 0 {
+                name
+            } else {
+                let mut s = format!("{}(", name);
+
+                for i in 1..arity {
+                    let t = show_cell(machine, HeapAddr(a + i));
+                    s.push_str(&format!("{}, ", t));
+                }
+
+                let t = show_cell(machine, HeapAddr(a + arity));
+                s.push_str(&format!("{})", t));
+
+                s
+            }
+        }
+        Func(_) => panic!("Attempted to render a functor, when a ref or str cell was expected"),
+    }
+}
+
+fn label(term: Term, unbound: &HashMap<Term, Term>) -> Term {
+    match term {
+        v @ Term::Var(_) => {
+            if unbound.contains_key(&v) {
+                unbound.get(&v).cloned().unwrap()
+            } else {
+                v
+            }
+        }
+        Term::Structure(mut s) => {
+            let mut new_structure = Structure {
+                name: s.name,
+                arity: s.arity,
+                args: Vec::new(),
+            };
+            let mut args = s.args;
+
+            for arg in args {
+                let new_arg = label(arg, unbound);
+                new_structure.args.push(new_arg);
+            }
+
+            Term::Structure(new_structure)
+        }
+        t => t,
+    }
 }
 
 #[cfg(test)]
@@ -904,7 +1003,7 @@ mod tests {
 
         assert!(!machine.fail);
         assert_eq!(
-            "p(_X2, h(_X2, _X3), f(_X3))",
+            "p(_H2, h(_H2, _H3), f(_H3))",
             show_cell(&machine, HeapAddr(7))
         );
     }
@@ -1052,6 +1151,8 @@ mod tests {
             .collect();
 
         assert_eq!(expected_program_bindings, program_bindings);
+
+        println!("{:?}\n{:?}", query_bindings, program_bindings);
     }
 
     #[test]
@@ -1171,38 +1272,5 @@ mod tests {
             Str(11),
             Str(3),
         ]
-    }
-
-    fn show_cell(machine: &Machine, address: Store) -> String {
-        let d = machine.get_store_cell(machine.deref(address));
-
-        match d.clone() {
-            Ref(a) => match &machine.heap[a] {
-                Ref(v) if *v == a => format!("_X{}", v),
-                r @ Ref(_) => show_cell(machine, HeapAddr(a)),
-                _ => show_cell(machine, HeapAddr(a)),
-            },
-            Str(a) => {
-                let cell = Str(a);
-                let Functor(name, arity) = machine.get_functor(&cell).clone();
-
-                if arity == 0 {
-                    name
-                } else {
-                    let mut s = format!("{}(", name);
-
-                    for i in 1..arity {
-                        let t = show_cell(machine, HeapAddr(a + i));
-                        s.push_str(&format!("{}, ", t));
-                    }
-
-                    let t = show_cell(machine, HeapAddr(a + arity));
-                    s.push_str(&format!("{})", t));
-
-                    s
-                }
-            }
-            Func(_) => panic!("Attempted to render a functor, when a ref or str cell was expected"),
-        }
     }
 }
