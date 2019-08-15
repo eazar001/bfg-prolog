@@ -888,8 +888,8 @@ pub fn find_solutions(solvent_args: &[Term], other_args: &[Term]) -> Bindings {
     let other_terms = other_args.iter();
     let terms = solvent_terms.zip(other_terms);
 
-    let internal_var = |t| -> bool {
-        if let Term::Var(Var(ref v)) = t {
+    let internal_var = |t: &Term| -> bool {
+        if let Term::Var(Var(v)) = t {
             let mut chars: Vec<_> = v.chars().take(3).collect();
 
             if chars.len() < 3 {
@@ -923,7 +923,7 @@ pub fn find_solutions(solvent_args: &[Term], other_args: &[Term]) -> Bindings {
 
     mappings
         .iter()
-        .filter(|(k, v)| k != v && !(internal_var((*k).clone()) || internal_var((*v).clone())))
+        .filter(|(k, v)| k != v && !(internal_var(k) || internal_var(v)))
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect()
 }
