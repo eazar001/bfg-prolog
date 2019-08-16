@@ -1195,6 +1195,71 @@ mod tests {
         assert_eq!(&expected_program_instructions, &program_instructions);
     }
 
+    #[test]
+    fn test_exercise_2_9() {
+        let parser = parser::ExpressionParser::new();
+        let query = parser.parse("p(f(X), h(Y, f(a)), Y).").unwrap();
+        let program = parser.parse("p(Z, h(Z, W), f(W)).").unwrap();
+        let mut machine = Machine::new();
+        let mut query_allocation = HashMap::new();
+        let mut program_allocation = HashMap::new();
+        let mut query_set = TermSet::new();
+        let mut program_set = TermSet::new();
+
+        let query_instructions = compile_query(&query, &mut query_allocation, &mut query_set);
+        let program_instructions =
+            compile_fact(&program, &mut program_allocation, &mut program_set);
+
+        machine.push_instructions(&CodeType::Query(Functor::from("p/3")), &query_instructions);
+        machine.push_instructions(&CodeType::Fact(Functor::from("p/3")), &program_instructions);
+        machine.execute(&CodeType::Query(Functor::from("p/3")));
+        machine.execute(&CodeType::Fact(Functor::from("p/3")));
+
+        let query_tree = query.structuralize().unwrap();
+        let program_tree = program.structuralize().unwrap();
+        let query_args = &query_tree.args;
+        let program_args = &program_tree.args;
+        let program_args_unbound = program_args.clone();
+
+        let program_args: Vec<_> = program_args
+            .iter()
+            .map(|t| {
+                if !program_allocation.contains_key(t) {
+                    t.clone()
+                } else {
+                    let mut s = show_cell(&machine, Register(*program_allocation.get(t).unwrap()));
+                    s.push_str(".");
+                    Term::Structure(parser.parse(&s).unwrap().structuralize().unwrap())
+                }
+            })
+            .collect();
+
+        let query_bindings = find_solutions(&query_args, &program_args);
+        let mut query_bindings: Vec<_> = query_bindings.iter().collect();
+        query_bindings.sort();
+        let query_bindings: Vec<_> = query_bindings
+            .iter()
+            .map(|(var, term)| format!("{} = {}", var, term))
+            .collect();
+
+        assert!(!machine.fail);
+
+        let expected_query_bindings = vec!["X = f(a)", "Y = f(f(a))"];
+        let expected_program_bindings = vec!["W = f(a)", "Z = f(f(a))"];
+
+        assert_eq!(&expected_query_bindings, &query_bindings);
+
+        let program_bindings = find_solutions(&program_args_unbound, &program_args);
+        let mut program_bindings: Vec<_> = program_bindings.iter().collect();
+        program_bindings.sort();
+        let program_bindings: Vec<_> = program_bindings
+            .iter()
+            .map(|(var, term)| format!("{} = {}", var, term))
+            .collect();
+
+        assert_eq!(expected_program_bindings, program_bindings);
+    }
+
     // utility test functions
 
     // Figure 2.3: Compiled code for L0 query ?- p(Z, h(Z, W), f(W)).
