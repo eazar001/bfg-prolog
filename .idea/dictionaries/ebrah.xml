@@ -2,12 +2,18 @@
   <dictionary name="ebrah">
     <words>
       <w>addr</w>
+      <w>asrl</w>
+      <w>assertz</w>
+      <w>choicepoints</w>
       <w>deref</w>
+      <w>nonvar</w>
       <w>prolog</w>
       <w>structuralizable</w>
       <w>structuralize</w>
       <w>structurize</w>
+      <w>subgoals</w>
       <w>subterm</w>
+      <w>toplevel</w>
       <w>unstructuralizable</w>
       <w>usize</w>
     </words>

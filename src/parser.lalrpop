@@ -2,6 +2,24 @@ use crate::ast::*;
 
 grammar;
 
+pub Const: Const = {
+    <r"[a-z]+[A-Za-z_0-9]*"> => Const(<>.parse().unwrap()),
+    <r"'[A-Za-z0-9_]*'"> => Const(<>.parse().unwrap())
+}
+
+pub Var: Var = {
+    // leading underscore variables (anonymous)
+    <r"_[A-Za-z0-9_]+"> => Var(String::from(<>), 0),
+    // Capital first variables
+    <r"[A-Z][A-Za-z0-9_]*"> => Var(String::from(<>), 0)
+};
+
+pub FunctorName: String = {
+    <name:r"[a-z]+[A-Za-z_0-9]*\("> => {
+        let s = &name[..name.len()-1];
+        String::from(s)
+    }
+};
 
 pub Args: Vec<Term> = {
     <var:Var> "," <args:Args> => {
@@ -14,11 +32,6 @@ pub Args: Vec<Term> = {
         args.push(Term::Atom(a));
         args
     },
-    <structure:Structure> "," <args:Args> => {
-        let mut args = args;
-        args.push(Term::Structure(structure));
-        args
-    },
     <v:Var> ")" => {
         let args = vec![Term::Var(v)];
         args
@@ -27,82 +40,38 @@ pub Args: Vec<Term> = {
         let args = vec![Term::Atom(a)];
         args
     },
-    <s:Structure> ")" => {
-        let args = vec![Term::Structure(s)];
-        args
-    }
-};
-
-pub Body: Vec<Structure> = {
-    <a:Atom> "," <body:Body> => {
-        let mut body = body;
-        body.push(Term::Atom(a).structuralize().unwrap());
-        body
-    },
-    <structure:Structure> "," <body:Body> => {
-        let mut body = body;
-        body.push(Term::Structure(structure).structuralize().unwrap());
-        body
-    },
-    <a:Atom> "." => {
-        let body = vec![Term::Atom(a).structuralize().unwrap()];
-        body
-    },
-    <s:Structure> "." => {
-        let body = vec![Term::Structure(s).structuralize().unwrap()];
-        body
-    }
 };
 
 pub Atom: Atom = {
-    // unquoted atoms
-    <r"[a-z]+[A-Za-z_0-9]*"> => Atom(<>.parse().unwrap()),
-    // quoted atoms
-    <r"'[A-Za-z0-9_]*'"> => Atom(<>.parse().unwrap())
-};
-
-pub Var: Var = {
-    // leading underscore variables (anonymous)
-    <r"_[A-Za-z0-9_]+"> => Var(String::from(<>)),
-    // Capital first variables
-    <r"[A-Z][A-Za-z0-9_]*"> => Var(String::from(<>))
-};
-
-pub FunctorName: String = {
-    <name:r"[a-z]+[A-Za-z_0-9]*\("> => {
-        let s = &name[..name.len()-1];
-
-        String::from(s)
-    }
-};
-
-pub Structure: Structure = {
+    <Const> => Atom { name: <>, arity: 0, args: vec![] },
     <name:FunctorName> <args:Args> => {
         let arity = args.len();
         let mut args = args;
         args.reverse();
 
         assert!(arity > 0);
+        assert!(arity == args.len());
 
-        Structure { name: name, arity: arity, args: args }
+        Atom { name: Const(name), arity: arity, args: args }
     }
 };
 
-pub Expression: Term = {
-    <Atom> "." => Term::Atom(<>),
-    <Var> "." => Term::Var(<>),
-    <Structure> "." => Term::Structure(<>),
-    <head:Atom> ":-" <body:Body> => {
-        let head = head.structuralize().unwrap();
-        let mut body = body;
-        body.reverse();
-        let rule = Rule { head: head, body: body };
-        Term::Rule(rule)
-    },
-    <head:Structure> ":-" <body:Body> => {
-        let mut body = body;
-        body.reverse();
-        let rule = Rule { head: head, body: body };
-        Term::Rule(rule)
+pub Clause: Clause = {
+    <Atom> => vec![<>],
+    <a:Atom> "," <c:Clause> => {
+        let mut goals = c;
+        goals.push(a);
+        goals
     }
+}
+
+pub Assertion: Assertion = {
+    <a:Atom> "." => {
+        Assertion { head: a, clause: vec![] }
+    },
+    <a:Atom> ":-" <clause:Clause> => {
+        let mut clause = clause;
+        clause.reverse();
+        Assertion { head: a, clause: clause }
+    },
 }

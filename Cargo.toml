@@ -8,8 +8,8 @@ edition = "2018"
 lalrpop = "0.17.1"
 
 [dependencies]
-env_logger = "0.6.2"
-log = "0.4.6"
 lalrpop = "0.17.1"
 lalrpop-util = "0.17.1"
 regex = "1.1.9"
+lazy_static = "1.3.0"
+pancurses = "0.16.1"

@@ -1,121 +1,62 @@
+use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
-
-type Arity = usize;
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Var(pub String);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Number {
-    Integer(i32),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Atom(pub String);
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Rule {
-    pub head: Structure,
-    pub body: Vec<Structure>,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Term {
     Var(Var),
+    Const(Const),
     Atom(Atom),
-    Structure(Structure),
-    Rule(Rule),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Structure {
-    pub name: String,
+pub struct Var(pub String, pub usize);
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Const(pub String);
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Atom {
+    pub name: Const,
     pub arity: Arity,
     pub args: Vec<Term>,
 }
 
-pub trait Structuralize {
-    fn structuralize(&self) -> Option<Structure>;
-    fn name(&self) -> String;
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Assertion {
+    pub head: Atom,
+    pub clause: Clause,
 }
 
-impl Structuralize for Atom {
-    fn structuralize(&self) -> Option<Structure> {
-        let Atom(a) = self;
-        Some(Structure {
-            name: a.clone(),
-            arity: 0,
-            args: Vec::new(),
-        })
-    }
+pub type Arity = usize;
+pub type Clause = Vec<Atom>;
 
-    fn name(&self) -> String {
-        self.0.clone()
-    }
-}
-
-impl Structuralize for Structure {
-    fn structuralize(&self) -> Option<Structure> {
-        let mut args = Vec::new();
-
-        for t in &self.args {
-            match t {
-                Term::Atom(a) => args.push(Term::Structure(a.structuralize().unwrap())),
-                Term::Structure(ref s) => {
-                    args.push(Term::Structure(s.structuralize().unwrap()));
-                }
-                _ => args.push(t.clone()),
-            }
-        }
-
-        Some(Structure {
-            name: String::from(&self.name),
-            arity: self.arity,
+impl Atom {
+    pub fn new(name: &str, args: Vec<Term>) -> Self {
+        Atom {
+            name: Const(String::from(name)),
+            arity: args.len(),
             args,
-        })
-    }
-
-    fn name(&self) -> String {
-        let Structure { name, .. } = self;
-        name.clone()
-    }
-}
-
-impl Structuralize for Term {
-    fn structuralize(&self) -> Option<Structure> {
-        match self {
-            Term::Atom(a) => Some(a.structuralize().unwrap()),
-            Term::Structure(c) => Some(c.structuralize().unwrap()),
-            t => None,
-        }
-    }
-
-    fn name(&self) -> String {
-        match self {
-            Term::Structure(s) => s.name.clone(),
-            Term::Atom(Atom(a)) => a.clone(),
-            Term::Var(Var(v)) => v.clone(),
-            Term::Rule(Rule { head, .. }) => head.name.clone(),
         }
     }
 }
 
-impl From<&Atom> for Structure {
-    fn from(Atom(a): &Atom) -> Structure {
-        Structure {
-            name: a.clone(),
-            arity: 0,
-            args: Vec::new(),
-        }
+impl Var {
+    pub fn new(name: &str, n: usize) -> Self {
+        Var(String::from(name), n)
     }
 }
 
 impl Display for Term {
     fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
         match self {
-            Term::Var(Var(label)) => Ok(write!(f, "{}", label)?),
-            Term::Atom(Atom(a)) => Ok(write!(f, "{}", a)?),
-            Term::Structure(Structure { name, arity, args }) => match args.len() {
+            Term::Var(Var(name, n)) if *n == 0 => Ok(write!(f, "{}", name)?),
+            Term::Var(Var(name, n)) => Ok(write!(f, "{}{}", name, n)?),
+            Term::Const(Const(a)) => Ok(write!(f, "{}", a)?),
+            Term::Atom(Atom {
+                name: Const(name),
+                arity,
+                args,
+            }) => match args.len() {
                 0 => Ok(write!(f, "{}", &name)?),
                 _ => {
                     let init = &args[..args.len() - 1];
@@ -131,7 +72,6 @@ impl Display for Term {
                     Ok(write!(f, "{}({}", &name, args)?)
                 }
             },
-            r @ Term::Rule(_) => Ok(write!(f, "{:?}", r)?),
         }
     }
 }
