@@ -4,8 +4,13 @@ grammar;
 
 pub Const: Const = {
     <r"[a-z]+[A-Za-z_0-9]*"> => Const(<>.parse().unwrap()),
-    <r"'[A-Za-z0-9_]*'"> => Const(<>.parse().unwrap())
-}
+    <r"'[A-Za-z0-9 _]*'"> => {
+        let s: String = <>.parse().unwrap();
+        let s = &s[1..s.len()-1];
+
+        Const(String::from(s))
+    },
+};
 
 pub Var: Var = {
     // leading underscore variables (anonymous)
@@ -63,7 +68,7 @@ pub Clause: Clause = {
         goals.push(a);
         goals
     }
-}
+};
 
 pub Assertion: Assertion = {
     <a:Atom> "." => {
@@ -74,4 +79,13 @@ pub Assertion: Assertion = {
         clause.reverse();
         Assertion { head: a, clause: clause }
     },
-}
+};
+
+pub Code: Vec<Assertion> = {
+    <Assertion> => vec![<>],
+    <c:Assertion> <cs:Code> => {
+        let mut cs = cs;
+        cs.push(c);
+        cs
+    }
+};

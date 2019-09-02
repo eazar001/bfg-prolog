@@ -359,14 +359,14 @@ fn reduce_atom(
     }
 }
 
-pub fn solve_toplevel(c: Clause) {
+pub fn solve_toplevel(kb: &[Assertion], c: Clause) {
     let window = initscr();
     let env = Environment::new();
     window.keypad(true);
 
-    match solve(&window, &[], &KB, &env, &c, 1) {
+    match solve(&window, &[], kb, &env, &c, 1) {
         Err(SolveErr::NoSolution) => {
-            window.printw("\nNo.");
+            window.printw("\n\nNo.");
             window.refresh();
         }
         Ok(()) => (),
@@ -383,44 +383,4 @@ pub fn solve_toplevel(c: Clause) {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_fail() {
-        solve_toplevel(vec![Atom::new(
-            "p",
-            vec![Term::Atom(Atom::new("b", vec![]))],
-        )])
-    }
-
-    #[test]
-    fn test_q_2() {
-        solve_toplevel(vec![Atom::new(
-            "q",
-            vec![
-                Term::Var(Var("X".to_string(), 0)),
-                Term::Var(Var("Y".to_string(), 0)),
-            ],
-        )])
-    }
-
-    #[test]
-    fn test_r_2() {
-        solve_toplevel(vec![Atom::new(
-            "r",
-            vec![
-                Term::Var(Var(String::from("X"), 0)),
-                Term::Var(Var(String::from("Y"), 0)),
-            ],
-        )])
-    }
-
-    #[test]
-    fn test_p_2() {
-        solve_toplevel(vec![Atom::new(
-            "p",
-            vec![
-                Term::Var(Var("U".to_string(), 0)),
-                Term::Var(Var("V".to_string(), 0)),
-            ],
-        )])
-    }
 }
