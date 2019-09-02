@@ -57,7 +57,7 @@ pub Atom: Atom = {
 };
 
 pub Clause: Clause = {
-    <Atom> => vec![<>],
+    <Atom> "." => vec![<>],
     <a:Atom> "," <c:Clause> => {
         let mut goals = c;
         goals.push(a);
