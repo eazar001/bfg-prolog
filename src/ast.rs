@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -21,7 +20,7 @@ pub struct Atom {
     pub args: Vec<Term>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Assertion {
     pub head: Atom,
     pub clause: Clause,
@@ -54,8 +53,8 @@ impl Display for Term {
             Term::Const(Const(a)) => Ok(write!(f, "{}", a)?),
             Term::Atom(Atom {
                 name: Const(name),
-                arity,
                 args,
+                ..
             }) => match args.len() {
                 0 => Ok(write!(f, "{}", &name)?),
                 _ => {
@@ -73,5 +72,23 @@ impl Display for Term {
                 }
             },
         }
+    }
+}
+
+impl Display for Var {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
+        Ok(write!(f, "{}", Term::Var(self.clone()))?)
+    }
+}
+
+impl Display for Const {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
+        Ok(write!(f, "{}", Term::Const(self.clone()))?)
+    }
+}
+
+impl Display for Atom {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
+        Ok(write!(f, "{}", Term::Atom(self.clone()))?)
     }
 }

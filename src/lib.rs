@@ -6,8 +6,6 @@ use lazy_static::lazy_static;
 use pancurses::*;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
-use std::io;
-use std::sync::Mutex;
 
 lalrpop_mod!(pub parser);
 
@@ -85,15 +83,9 @@ struct ChoicePoint {
     depth: usize,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum Solution {
-    No,
-    Yes(Environment),
-}
-
 impl Display for Environment {
     fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
-        let mut env: Vec<_> = self.0.iter().filter(|(Var(_, n), t)| *n == 0).collect();
+        let mut env: Vec<_> = self.0.iter().filter(|(Var(_, n), _t)| *n == 0).collect();
         let mut response = String::from("\n");
 
         if env.is_empty() {
@@ -102,25 +94,14 @@ impl Display for Environment {
 
         env.sort();
 
-        for (Var(x, n), t) in &env[..env.len() - 1] {
+        for (Var(x, _n), t) in &env[..env.len() - 1] {
             response.push_str(&format!("{} = {}\n", x, self.substitute_term(t)))
         }
 
-        let (Var(x, n), t) = env.last().unwrap();
+        let (Var(x, _n), t) = env.last().unwrap();
         response.push_str(&format!("{} = {} ", x, self.substitute_term(t)));
 
         Ok(write!(f, "{}", response)?)
-    }
-}
-
-impl ChoicePoint {
-    fn new(database: Database, environment: Environment, clause: Clause, depth: usize) -> Self {
-        ChoicePoint {
-            database,
-            environment,
-            clause,
-            depth,
-        }
     }
 }
 
@@ -293,7 +274,7 @@ fn display_solution(
 
             match window.getch() {
                 Some(Input::Character(c)) if c == ';' => {
-                    continue_search(window, ch);
+                    continue_search(window, ch)?;
                 }
                 None | _ => {
                     return Err(SolveErr::NoSolution);
@@ -385,7 +366,7 @@ pub fn solve_toplevel(c: Clause) {
 
     match solve(&window, &[], &KB, &env, &c, 1) {
         Err(SolveErr::NoSolution) => {
-            window.printw("No.");
+            window.printw("\nNo.");
             window.refresh();
         }
         Ok(()) => (),
