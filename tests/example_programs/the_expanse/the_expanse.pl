@@ -1,3 +1,9 @@
+leader(X) :-
+    captain(S, X).
+
+leader(X) :-
+    executive_officer(S, X).
+
 captain('Rocinante', 'James Holden').
 captain('Canterbury', 'McDowell').
 executive_officer('Rocinante', 'Naomi Nagata').
