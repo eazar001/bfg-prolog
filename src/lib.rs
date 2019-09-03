@@ -2,64 +2,11 @@ pub mod ast;
 
 use self::ast::{Assertion, Atom, Clause, Const, Term, Var};
 use lalrpop_util::lalrpop_mod;
-use lazy_static::lazy_static;
 use pancurses::*;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 
 lalrpop_mod!(pub parser);
-
-lazy_static! {
-    static ref KB: Database = {
-        vec![
-            Assertion {
-                head: Atom::new(
-                    "p",
-                    vec![
-                        Term::Var(Var("X".to_string(), 0)),
-                        Term::Var(Var("Y".to_string(), 0)),
-                    ],
-                ),
-                clause: vec![
-                    Atom::new(
-                        "q",
-                        vec![
-                            Term::Var(Var("X".to_string(), 0)),
-                            Term::Var(Var("Z".to_string(), 0)),
-                        ],
-                    ),
-                    Atom::new(
-                        "r",
-                        vec![
-                            Term::Var(Var("Z".to_string(), 0)),
-                            Term::Var(Var("Y".to_string(), 0)),
-                        ],
-                    ),
-                ],
-            },
-            Assertion {
-                head: Atom::new(
-                    "q",
-                    vec![
-                        Term::Atom(Atom::new("a", vec![])),
-                        Term::Atom(Atom::new("b", vec![])),
-                    ],
-                ),
-                clause: vec![],
-            },
-            Assertion {
-                head: Atom::new(
-                    "r",
-                    vec![
-                        Term::Atom(Atom::new("b", vec![])),
-                        Term::Atom(Atom::new("c", vec![])),
-                    ],
-                ),
-                clause: vec![],
-            },
-        ]
-    };
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Environment(HashMap<Var, Term>);
