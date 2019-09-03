@@ -4,12 +4,13 @@ grammar;
 
 pub Const: Const = {
     <r"[a-z]+[A-Za-z_0-9]*"> => Const(<>.parse().unwrap()),
-    <r"'[A-Za-z0-9 _]*'"> => {
+    <r"'[a-z]+[A-Za-z_0-9]*'"> => {
         let s: String = <>.parse().unwrap();
         let s = &s[1..s.len()-1];
 
         Const(String::from(s))
     },
+    <r"'[A-Z0-9 _]+[A-Za-z0-9 _]*'"> => Const(<>.parse().unwrap()),
 };
 
 pub Var: Var = {

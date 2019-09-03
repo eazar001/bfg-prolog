@@ -6,9 +6,9 @@ use std::fs::read_to_string;
 lalrpop_mod!(pub parser);
 
 fn main() {
-    let v = read_source_code("tests\\test.pl");
+    let v = read_source_code("tests\\example_programs\\the_expanse\\the_expanse.pl");
 
-    solve_toplevel(&v, parse_query("captain(X), executive_officer(Y)."));
+    solve_toplevel(&v, parse_query("captain(S, X), executive_officer(S1, Y)."));
 }
 
 fn read_source_code(path: &str) -> Vec<Assertion> {
