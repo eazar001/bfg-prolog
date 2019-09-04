@@ -8,7 +8,10 @@ lalrpop_mod!(pub parser);
 fn main() {
     let v = read_source_code("tests\\example_programs\\the_expanse\\the_expanse.pl");
 
-    solve_toplevel(&v, parse_query("leader(X)."));
+    solve_toplevel(
+        &v,
+        parse_query("member(X, list(a, list(b, list(c, list(d, list(e, list(nil)))))))."),
+    );
 }
 
 fn read_source_code(path: &str) -> Vec<Assertion> {
