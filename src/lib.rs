@@ -273,7 +273,7 @@ fn solve(
 
                 d.extend_from_slice(next_c);
 
-                solve(window, &next_ch, kb, &kb.to_vec(), &next_env, &d, n + 1)
+                solve(window, &next_ch, kb, kb, &next_env, &d, n + 1)
             }
         },
     }
