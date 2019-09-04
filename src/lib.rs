@@ -203,6 +203,7 @@ fn renumber_atom(n: usize, a: &Atom) -> Atom {
 
 fn display_solution(
     window: &Window,
+    kb: &[Assertion],
     ch: &[ChoicePoint],
     env: &Environment,
 ) -> Result<(), SolveErr> {
@@ -221,7 +222,7 @@ fn display_solution(
 
             match window.getch() {
                 Some(Input::Character(c)) if c == ';' => {
-                    continue_search(window, ch)?;
+                    continue_search(window, kb, ch)?;
                 }
                 None | _ => {
                     return Err(SolveErr::NoSolution);
@@ -233,7 +234,7 @@ fn display_solution(
     Ok(())
 }
 
-fn continue_search(window: &Window, ch: &[ChoicePoint]) -> Result<(), SolveErr> {
+fn continue_search(window: &Window, kb: &[Assertion], ch: &[ChoicePoint]) -> Result<(), SolveErr> {
     match ch.split_first() {
         None => Err(SolveErr::NoSolution),
         Some((
@@ -244,22 +245,23 @@ fn continue_search(window: &Window, ch: &[ChoicePoint]) -> Result<(), SolveErr> 
                 depth: n,
             },
             cs,
-        )) => solve(window, cs, asrl, env, gs, *n),
+        )) => solve(window, cs, kb, asrl, env, gs, *n),
     }
 }
 
 fn solve(
     window: &Window,
     ch: &[ChoicePoint],
+    kb: &[Assertion],
     asrl: &[Assertion],
     env: &Environment,
     c: &[Atom],
     n: usize,
 ) -> Result<(), SolveErr> {
     match c.split_first() {
-        None => display_solution(window, ch, env),
+        None => display_solution(window, kb, ch, env),
         Some((a, next_c)) => match reduce_atom(env, n, a, asrl) {
-            None => continue_search(window, ch),
+            None => continue_search(window, kb, ch),
             Some((next_asrl, next_env, mut d)) => {
                 let mut next_ch = ch.to_vec();
                 next_ch.push(ChoicePoint {
@@ -271,7 +273,7 @@ fn solve(
 
                 d.extend_from_slice(next_c);
 
-                solve(window, &next_ch, asrl, &next_env, &d, n + 1)
+                solve(window, &next_ch, kb, &kb.to_vec(), &next_env, &d, n + 1)
             }
         },
     }
@@ -309,9 +311,10 @@ fn reduce_atom(
 pub fn solve_toplevel(kb: &[Assertion], c: Clause) {
     let window = initscr();
     let env = Environment::new();
+    let asrl = kb.to_vec();
     window.keypad(true);
 
-    match solve(&window, &[], kb, &env, &c, 1) {
+    match solve(&window, &[], kb, &asrl, &env, &c, 1) {
         Err(SolveErr::NoSolution) => {
             window.printw("\n\nNo.");
             window.refresh();
