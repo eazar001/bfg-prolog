@@ -13,13 +13,9 @@ whitelist('Naomi Nagata').
 
 unify(X, X).
 
-list(nil).
-list(Head, list(Tail)).
-
-member(X, list(X, list(nil))).
-member(X, list(X, list(Y, Rest))).
-member(X, list(Y, list(Z, Rest))) :-
-    member(X, list(Z, Rest)).
+member(X, list(X, _Rest)).
+member(X, list(_Y, Rest)) :-
+    member(X, Rest).
 
 leader(X) :-
     captain(S, X),

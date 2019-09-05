@@ -10,7 +10,7 @@ fn main() {
 
     solve_toplevel(
         &v,
-        parse_query("member(X, list(a, list(b, list(c, list(d, list(e, list(nil)))))))."),
+        parse_query("member(X, list(a, list(b, list(c, list(d, list(e, nil))))))."),
     );
 }
 
