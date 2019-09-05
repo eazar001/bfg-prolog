@@ -8,9 +8,14 @@ lalrpop_mod!(pub parser);
 fn main() {
     let v = read_source_code("tests\\example_programs\\the_expanse\\the_expanse.pl");
 
+    //    solve_toplevel(
+    //        &v,
+    //        parse_query("member(X, list(a, list(b, list(c, list(d, list(e, nil))))))."),
+    //    );
+
     solve_toplevel(
         &v,
-        parse_query("member(X, list(a, list(b, list(c, list(d, list(e, nil))))))."),
+        parse_query("append(X, Y, list(a, list(b, list(c, list(d, list(e, nil))))))."),
     );
 }
 

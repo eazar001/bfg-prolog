@@ -17,6 +17,10 @@ member(X, list(X, _Rest)).
 member(X, list(_Y, Rest)) :-
     member(X, Rest).
 
+append(nil, Zs, Zs).
+append(list(X, Xs), Ys, list(X, Zs)) :-
+    append(Xs, Ys, Zs).
+
 leader(X) :-
     captain(S, X),
     whitelist(X).
