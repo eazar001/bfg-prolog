@@ -3,7 +3,7 @@ captain('Canterbury', 'McDowell').
 executive_officer('Rocinante', 'Naomi Nagata').
 executive_officer('Canterbury', vacant).
 pilot('Rocinante', 'Alex Kamal').
-pilot('Canterbury', 'Alexa Kamal').
+pilot('Canterbury', 'Alex Kamal').
 mechanic('Canterbury', 'Amos Burton').
 mechanic('Rocinante', 'Amos Burton').
 whitelist('James Holden').

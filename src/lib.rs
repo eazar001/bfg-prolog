@@ -2,7 +2,6 @@ pub mod ast;
 
 use self::ast::{Assertion, Atom, Clause, Const, Term, Var};
 use lalrpop_util::lalrpop_mod;
-use pancurses::*;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 
@@ -20,6 +19,12 @@ enum UnifyErr {
 #[derive(Debug, Copy, Clone)]
 enum SolveErr {
     NoSolution,
+}
+
+#[derive(Debug, Clone)]
+enum Solution {
+    Answer(String),
+    Continuation(String, (Database, Vec<ChoicePoint>)),
 }
 
 #[derive(Debug, Clone)]
@@ -201,40 +206,7 @@ fn renumber_atom(n: usize, a: &Atom) -> Atom {
     Atom::new(c, ts.iter().map(|t| renumber_term(n, t)).collect())
 }
 
-fn display_solution(
-    window: &Window,
-    kb: &[Assertion],
-    ch: &[ChoicePoint],
-    env: &Environment,
-) -> Result<(), SolveErr> {
-    match (&env.to_string()[..], ch) {
-        ("Yes", _) => {
-            window.printw("Yes.");
-            window.refresh();
-        }
-        (answer, []) => {
-            window.printw(String::from(answer));
-            window.refresh();
-        }
-        (answer, ch) => {
-            window.printw(String::from(answer));
-            window.refresh();
-
-            match window.getch() {
-                Some(Input::Character(c)) if c == ';' => {
-                    continue_search(window, kb, ch)?;
-                }
-                None | _ => {
-                    return Err(SolveErr::NoSolution);
-                }
-            }
-        }
-    }
-
-    Ok(())
-}
-
-fn continue_search(window: &Window, kb: &[Assertion], ch: &[ChoicePoint]) -> Result<(), SolveErr> {
+fn continue_search(kb: &[Assertion], ch: &[ChoicePoint]) -> Result<Solution, SolveErr> {
     match ch.split_first() {
         None => Err(SolveErr::NoSolution),
         Some((
@@ -245,23 +217,28 @@ fn continue_search(window: &Window, kb: &[Assertion], ch: &[ChoicePoint]) -> Res
                 depth: n,
             },
             cs,
-        )) => solve(window, cs, kb, asrl, env, gs, *n),
+        )) => solve(cs, kb, asrl, env, gs, *n),
     }
 }
 
 fn solve(
-    window: &Window,
     ch: &[ChoicePoint],
     kb: &[Assertion],
     asrl: &[Assertion],
     env: &Environment,
     c: &[Atom],
     n: usize,
-) -> Result<(), SolveErr> {
+) -> Result<Solution, SolveErr> {
     match c.split_first() {
-        None => display_solution(window, kb, ch, env),
+        None => Ok(match (&env.to_string()[..], ch) {
+            ("Yes", _) => Solution::Answer(String::from("Yes.")),
+            (answer, []) => Solution::Answer(String::from(answer)),
+            (answer, ch) => {
+                Solution::Continuation(String::from(answer), (kb.to_vec(), ch.to_vec()))
+            }
+        }),
         Some((a, next_c)) => match reduce_atom(env, n, a, asrl) {
-            None => continue_search(window, kb, ch),
+            None => continue_search(kb, ch),
             Some((next_asrl, next_env, mut d)) => {
                 let mut next_ch = ch.to_vec();
                 next_ch.push(ChoicePoint {
@@ -273,7 +250,7 @@ fn solve(
 
                 d.extend_from_slice(next_c);
 
-                solve(window, &next_ch, kb, kb, &next_env, &d, n + 1)
+                solve(&next_ch, kb, kb, &next_env, &d, n + 1)
             }
         },
     }
@@ -309,24 +286,26 @@ fn reduce_atom(
 }
 
 pub fn solve_toplevel(kb: &[Assertion], c: Clause) {
-    let window = initscr();
     let env = Environment::new();
     let asrl = kb.to_vec();
-    window.keypad(true);
+    let mut s = solve(&[], kb, &asrl, &env, &c, 1);
 
-    match solve(&window, &[], kb, &asrl, &env, &c, 1) {
-        Err(SolveErr::NoSolution) => {
-            window.printw("\n\nNo.");
-            window.refresh();
+    loop {
+        match s {
+            Err(SolveErr::NoSolution) => {
+                println!("\nNo.");
+                break;
+            }
+            Ok(Solution::Continuation(ref answer, (ref kb, ref ch))) => {
+                println!("{}", answer);
+                s = continue_search(kb, ch);
+            }
+            Ok(Solution::Answer(answer)) => {
+                println!("{}", answer);
+                break;
+            }
         }
-        Ok(()) => (),
     }
-
-    window.printw("\nPress any key to continue\n");
-    window.refresh();
-    noecho();
-    window.getch();
-    endwin();
 }
 
 #[cfg(test)]
