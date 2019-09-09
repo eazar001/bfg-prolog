@@ -4,6 +4,7 @@ use self::ast::{Assertion, Atom, Clause, Const, Term, Var};
 use lalrpop_util::lalrpop_mod;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
+use std::io::Write;
 
 lalrpop_mod!(pub parser);
 
@@ -271,6 +272,10 @@ fn reduce_atom(
             },
             next_asrl,
         )) => {
+            if a.name == Const(String::from("halt")) && a.arity == 0 {
+                std::process::exit(0);
+            }
+
             let next_env = env.unify_atoms(a, &renumber_atom(n, b));
 
             match next_env {
@@ -297,8 +302,20 @@ pub fn solve_toplevel(kb: &[Assertion], c: Clause) {
                 break;
             }
             Ok(Solution::Continuation(ref answer, (ref kb, ref ch))) => {
-                println!("{}", answer);
-                s = continue_search(kb, ch);
+                print!("{}", answer);
+                std::io::stdout().flush().expect("Could not flush stdout");
+
+                let mut input_buffer = String::new();
+                std::io::stdin()
+                    .read_line(&mut input_buffer)
+                    .expect("error reading input");
+
+                match &input_buffer[..] {
+                    ";\n" => {
+                        s = continue_search(kb, ch);
+                    }
+                    _ => break,
+                }
             }
             Ok(Solution::Answer(answer)) => {
                 println!("{}", answer);

@@ -2,21 +2,26 @@ use bfg_prolog::ast::{Assertion, Clause};
 use bfg_prolog::*;
 use lalrpop_util::lalrpop_mod;
 use std::fs::read_to_string;
+use std::io::Write;
 
 lalrpop_mod!(pub parser);
 
 fn main() {
-    let v = read_source_code("tests\\example_programs\\the_expanse\\the_expanse.pl");
+    let source = read_source_code("tests\\example_programs\\the_expanse\\the_expanse.pl");
 
-    //    solve_toplevel(
-    //        &v,
-    //        parse_query("member(X, list(a, list(b, list(c, list(d, list(e, nil))))))."),
-    //    );
+    loop {
+        print!("?- ");
+        std::io::stdout().flush().expect("Could not flush stdout");
 
-    solve_toplevel(
-        &v,
-        parse_query("append(X, Y, list(a, list(b, list(c, list(d, list(e, nil))))))."),
-    );
+        let mut input_buffer = String::new();
+        std::io::stdin()
+            .read_line(&mut input_buffer)
+            .expect("error reading input");
+
+        let query = parse_query(&input_buffer);
+
+        solve_toplevel(&source, query.to_vec());
+    }
 }
 
 fn read_source_code(path: &str) -> Vec<Assertion> {
