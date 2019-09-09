@@ -311,7 +311,7 @@ pub fn solve_toplevel(kb: &[Assertion], c: Clause) {
                     .expect("error reading input");
 
                 match &input_buffer[..] {
-                    ";\n" => {
+                    ";\r\n" => {
                         s = continue_search(kb, ch);
                     }
                     _ => break,
