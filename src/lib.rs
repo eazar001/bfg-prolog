@@ -42,7 +42,7 @@ impl Display for Environment {
         let mut response = String::from("\n");
 
         if env.is_empty() {
-            return Ok(write!(f, "Yes")?);
+            return Ok(write!(f, "\nYes")?);
         }
 
         env.sort();
@@ -238,6 +238,16 @@ fn solve(
                 Solution::Continuation(String::from(answer), (kb.to_vec(), ch.to_vec()))
             }
         }),
+        Some((
+            Atom {
+                name: Const(ref n),
+                arity,
+                ..
+            },
+            _,
+        )) if n == "halt" && *arity == 0 => {
+            std::process::exit(0);
+        }
         Some((a, next_c)) => match reduce_atom(env, n, a, asrl) {
             None => continue_search(kb, ch),
             Some((next_asrl, next_env, mut d)) => {
@@ -272,10 +282,6 @@ fn reduce_atom(
             },
             next_asrl,
         )) => {
-            if a.name == Const(String::from("halt")) && a.arity == 0 {
-                std::process::exit(0);
-            }
-
             let next_env = env.unify_atoms(a, &renumber_atom(n, b));
 
             match next_env {

@@ -1,4 +1,4 @@
-use bfg_prolog::ast::{Assertion, Clause};
+use bfg_prolog::ast::{Assertion, Atom, Clause, Const, Term};
 use bfg_prolog::*;
 use lalrpop_util::lalrpop_mod;
 use std::fs::read_to_string;
@@ -7,7 +7,7 @@ use std::io::Write;
 lalrpop_mod!(pub parser);
 
 fn main() {
-    let source = read_source_code("tests\\example_programs\\the_expanse\\the_expanse.pl");
+    let mut source = Vec::new();
 
     loop {
         print!("?- ");
@@ -20,7 +20,17 @@ fn main() {
 
         let query = parse_query(&input_buffer);
 
-        solve_toplevel(&source, query.to_vec());
+        if query.len() == 1
+            && query[0].name == Const(String::from("consult"))
+            && query[0].arity == 1
+        {
+            if let Term::Atom(Atom { name: Const(p), .. }) = &query[0].args[0] {
+                source = read_source_code(p);
+                solve_toplevel(&source, (&query[1..]).to_vec());
+            }
+        } else {
+            solve_toplevel(&source, query);
+        }
     }
 }
 
