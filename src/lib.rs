@@ -232,9 +232,10 @@ fn solve(
 ) -> Result<Solution, SolveErr> {
     match c.split_first() {
         None => Ok(match (&env.to_string()[..], ch) {
-            ("Yes", _) => Solution::Answer(String::from("Yes.")),
             (answer, []) => Solution::Answer(String::from(answer)),
             (answer, ch) => {
+                let answer = if answer == "Yes" { "Yes " } else { answer };
+
                 Solution::Continuation(String::from(answer), (kb.to_vec(), ch.to_vec()))
             }
         }),
@@ -312,16 +313,8 @@ pub fn solve_toplevel(kb: &[Assertion], c: Clause) {
             Ok(Solution::Continuation(ref answer, (ref kb, ref ch))) => {
                 found = true;
 
-                match &answer[..] {
-                    "Yes" => {
-                        println!("\nYes.");
-                        break;
-                    }
-                    _ => {
-                        print!("{}", answer);
-                        std::io::stdout().flush().expect("Could not flush stdout");
-                    }
-                }
+                print!("{}", answer);
+                std::io::stdout().flush().expect("Could not flush stdout");
 
                 let mut input_buffer = String::new();
                 std::io::stdin()
@@ -336,7 +329,7 @@ pub fn solve_toplevel(kb: &[Assertion], c: Clause) {
                 }
             }
             Ok(Solution::Answer(answer)) => {
-                println!("\n{}", answer);
+                println!("\n{}.", answer);
                 break;
             }
         }
