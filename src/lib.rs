@@ -300,14 +300,17 @@ pub fn solve_toplevel(kb: &[Assertion], c: Clause) {
     let env = Environment::new();
     let asrl = kb.to_vec();
     let mut s = solve(&[], kb, &asrl, &env, &c, 1);
+    let mut found = false;
 
     loop {
         match s {
+            Err(SolveErr::NoSolution) if found => break,
             Err(SolveErr::NoSolution) => {
                 println!("\nNo.");
                 break;
             }
             Ok(Solution::Continuation(ref answer, (ref kb, ref ch))) => {
+                found = true;
                 print!("{}", answer);
                 std::io::stdout().flush().expect("Could not flush stdout");
 
