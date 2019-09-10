@@ -42,7 +42,7 @@ impl Display for Environment {
         let mut response = String::from("\n");
 
         if env.is_empty() {
-            return Ok(write!(f, "\nYes")?);
+            return Ok(write!(f, "Yes")?);
         }
 
         env.sort();
@@ -313,7 +313,7 @@ pub fn solve_toplevel(kb: &[Assertion], c: Clause) {
                 found = true;
 
                 match &answer[..] {
-                    "\nYes" => {
+                    "Yes" => {
                         println!("\nYes.");
                         break;
                     }
@@ -336,7 +336,7 @@ pub fn solve_toplevel(kb: &[Assertion], c: Clause) {
                 }
             }
             Ok(Solution::Answer(answer)) => {
-                println!("{}.", answer);
+                println!("\n{}", answer);
                 break;
             }
         }
