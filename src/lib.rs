@@ -311,8 +311,17 @@ pub fn solve_toplevel(kb: &[Assertion], c: Clause) {
             }
             Ok(Solution::Continuation(ref answer, (ref kb, ref ch))) => {
                 found = true;
-                print!("{}", answer);
-                std::io::stdout().flush().expect("Could not flush stdout");
+
+                match &answer[..] {
+                    "\nYes" => {
+                        println!("\nYes.");
+                        break;
+                    }
+                    _ => {
+                        print!("{}", answer);
+                        std::io::stdout().flush().expect("Could not flush stdout");
+                    }
+                }
 
                 let mut input_buffer = String::new();
                 std::io::stdin()
@@ -327,7 +336,7 @@ pub fn solve_toplevel(kb: &[Assertion], c: Clause) {
                 }
             }
             Ok(Solution::Answer(answer)) => {
-                println!("{}", answer);
+                println!("{}.", answer);
                 break;
             }
         }
