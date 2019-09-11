@@ -8,6 +8,7 @@ lalrpop_mod!(pub parser);
 
 fn main() {
     let mut source = Vec::new();
+    let consult_const = Const(String::from("consult"));
 
     loop {
         print!("?- ");
@@ -20,10 +21,7 @@ fn main() {
 
         let query = parse_query(&input_buffer);
 
-        if query.len() == 1
-            && query[0].name == Const(String::from("consult"))
-            && query[0].arity == 1
-        {
+        if query.len() == 1 && query[0].name == consult_const && query[0].arity == 1 {
             if let Term::Atom(Atom { name: Const(p), .. }) = &query[0].args[0] {
                 source = read_source_code(p);
                 solve_toplevel(&source, (&query[1..]).to_vec());
