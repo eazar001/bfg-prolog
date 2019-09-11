@@ -29,10 +29,16 @@ pub struct Assertion {
 pub type Arity = usize;
 pub type Clause = Vec<Atom>;
 
+impl Assertion {
+    pub fn new(head: Atom, clause: Clause) -> Self {
+        Assertion { head, clause }
+    }
+}
+
 impl Atom {
     pub fn new(name: &str, args: Vec<Term>) -> Self {
         Atom {
-            name: Const(String::from(name)),
+            name: Const::new(name),
             arity: args.len(),
             args,
         }
@@ -42,6 +48,12 @@ impl Atom {
 impl Var {
     pub fn new(name: &str, n: usize) -> Self {
         Var(String::from(name), n)
+    }
+}
+
+impl Const {
+    pub fn new(name: &str) -> Self {
+        Const(String::from(name))
     }
 }
 
@@ -55,18 +67,17 @@ impl Display for Term {
                 name: Const(name),
                 args,
                 ..
-            }) => match args.len() {
-                0 => Ok(write!(f, "{}", &name)?),
-                _ => {
+            }) => match args.last() {
+                None => Ok(write!(f, "{}", &name)?),
+                Some(last) => {
                     let init = &args[..args.len() - 1];
-                    let last = args.last();
                     let mut args = String::new();
 
                     for arg in init {
                         args.push_str(&format!("{}, ", arg));
                     }
 
-                    args.push_str(&format!("{})", last.unwrap()));
+                    args.push_str(&format!("{})", last));
 
                     Ok(write!(f, "{}({}", &name, args)?)
                 }

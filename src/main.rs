@@ -1,5 +1,6 @@
+use bfg_prolog::ast;
 use bfg_prolog::ast::{Assertion, Atom, Clause, Const, Term};
-use bfg_prolog::*;
+use bfg_prolog::solve_toplevel;
 use lalrpop_util::lalrpop_mod;
 use std::fs::read_to_string;
 use std::io::Write;
@@ -8,7 +9,7 @@ lalrpop_mod!(pub parser);
 
 fn main() {
     let mut source = Vec::new();
-    let consult_const = Const(String::from("consult"));
+    let consult_const = Const::new("consult");
 
     loop {
         print!("?- ");

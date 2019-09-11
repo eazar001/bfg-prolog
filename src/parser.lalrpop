@@ -8,16 +8,19 @@ pub Const: Const = {
         let s: String = <>.parse().unwrap();
         let s = &s[1..s.len()-1];
 
-        Const(String::from(s))
+        Const::new(s)
     },
-    <r"'[A-Z0-9 _]+[A-Za-z0-9 \\._-]*'"> => Const(<>.parse().unwrap()),
+    <r"'[A-Z0-9 _]+[A-Za-z0-9 \\._-]*'"> => {
+        let name: String = <>.parse().unwrap();
+        Const::new(&name)
+    },
 };
 
 pub Var: Var = {
     // leading underscore variables (anonymous)
-    <r"_[A-Za-z0-9_]+"> => Var(String::from(<>), 0),
+    <r"_[A-Za-z0-9_]+"> => Var::new(<>, 0),
     // Capital first variables
-    <r"[A-Z][A-Za-z0-9_]*"> => Var(String::from(<>), 0)
+    <r"[A-Z][A-Za-z0-9_]*"> => Var::new(<>, 0)
 };
 
 pub FunctorName: String = {
@@ -55,10 +58,7 @@ pub Atom: Atom = {
         let mut args = args;
         args.reverse();
 
-        assert!(arity > 0);
-        assert!(arity == args.len());
-
-        Atom { name: Const(name), arity: arity, args: args }
+        Atom::new(&name, args)
     }
 };
 
@@ -73,12 +73,12 @@ pub Clause: Clause = {
 
 pub Assertion: Assertion = {
     <a:Atom> "." => {
-        Assertion { head: a, clause: vec![] }
+        Assertion::new(a, vec![])
     },
     <a:Atom> ":-" <clause:Clause> => {
         let mut clause = clause;
         clause.reverse();
-        Assertion { head: a, clause: clause }
+        Assertion::new(a, clause)
     },
 };
 
