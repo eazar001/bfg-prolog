@@ -38,23 +38,22 @@ struct ChoicePoint {
 
 impl Display for Environment {
     fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
-        let mut env: Vec<_> = self.0.iter().filter(|(Var(_, n), _t)| *n == 0).collect();
+        let env: Vec<_> = self.0.iter().filter(|(Var(_, n), _t)| *n == 0).collect();
         let mut response = String::from("\n");
+        let last = env.last().cloned();
 
-        if env.is_empty() {
-            return Ok(write!(f, "Yes")?);
+        match last {
+            None => Ok(write!(f, "Yes")?),
+            Some((Var(last_x, _), last_t)) => {
+                for (Var(x, _n), t) in &env[..env.len() - 1] {
+                    response.push_str(&format!("{} = {}\n", x, self.substitute_term(t)))
+                }
+
+                response.push_str(&format!("{} = {} ", last_x, self.substitute_term(last_t)));
+
+                Ok(write!(f, "{}", response)?)
+            }
         }
-
-        env.sort();
-
-        for (Var(x, _n), t) in &env[..env.len() - 1] {
-            response.push_str(&format!("{} = {}\n", x, self.substitute_term(t)))
-        }
-
-        let (Var(x, _n), t) = env.last().unwrap();
-        response.push_str(&format!("{} = {} ", x, self.substitute_term(t)));
-
-        Ok(write!(f, "{}", response)?)
     }
 }
 
