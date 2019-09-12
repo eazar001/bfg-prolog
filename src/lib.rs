@@ -296,10 +296,11 @@ fn reduce_atom(
     }
 }
 
-pub fn solve_toplevel(interactive: bool, kb: &[Assertion], c: Clause) {
+pub fn solve_toplevel(interactive: bool, kb: &[Assertion], c: Clause) -> Vec<String> {
     let env = Environment::new();
     let asrl = kb.to_vec();
     let mut s = solve(&[], kb, &asrl, &env, &c, 1);
+    let mut answers = Vec::new();
     let mut found = false;
 
     loop {
@@ -307,20 +308,27 @@ pub fn solve_toplevel(interactive: bool, kb: &[Assertion], c: Clause) {
             Err(SolveErr::NoSolution) if found => break,
             Err(SolveErr::NoSolution) => {
                 println!("\nNo.");
+                if !interactive {
+                    answers.push(String::from("No."))
+                }
                 break;
             }
             Ok(Solution::Continuation(ref answer, (ref kb, ref ch))) => {
                 found = true;
 
                 print!("{}", answer);
+                if !interactive {
+                    answers.push(answer.clone())
+                }
+
                 std::io::stdout().flush().expect("Could not flush stdout");
 
-                let mut input_buffer = String::new();
-                std::io::stdin()
-                    .read_line(&mut input_buffer)
-                    .expect("error reading input");
-
                 if interactive {
+                    let mut input_buffer = String::new();
+                    std::io::stdin()
+                        .read_line(&mut input_buffer)
+                        .expect("error reading input");
+
                     match &input_buffer[..] {
                         ";\r\n" | ";\n" => {
                             s = continue_search(kb, ch);
@@ -333,10 +341,15 @@ pub fn solve_toplevel(interactive: bool, kb: &[Assertion], c: Clause) {
             }
             Ok(Solution::Answer(answer)) => {
                 println!("\n{}.", answer);
+                if !interactive {
+                    answers.push(answer)
+                }
                 break;
             }
         }
     }
+
+    answers
 }
 
 #[cfg(test)]
@@ -351,7 +364,7 @@ mod tests {
     }
 
     #[test]
-    fn test_unify_1_succeed() {
+    fn test_unify_1_succeeds() {
         let x = Term::Atom(Atom::new(
             "foo",
             vec![Term::Atom(Atom::new(
@@ -376,7 +389,7 @@ mod tests {
 
     #[test]
     #[should_panic]
-    fn test_unify_1_fail() {
+    fn test_unify_1_fails() {
         let x = Term::Atom(Atom::new(
             "foo",
             vec![Term::Atom(Atom::new(
@@ -397,7 +410,7 @@ mod tests {
     }
 
     #[test]
-    fn test_unify_2_succeed() {
+    fn test_unify_2_succeeds() {
         let x = Term::Var(Var::new("X", 0));
         let f = Term::Atom(Atom::new(
             "foo",
@@ -412,7 +425,7 @@ mod tests {
     }
 
     #[test]
-    fn test_unify_3_succeed() {
+    fn test_unify_3_succeeds() {
         let x = Term::Var(Var::new("X", 0));
         let y = Term::Var(Var::new("Y", 0));;
 
@@ -421,7 +434,7 @@ mod tests {
     }
 
     #[test]
-    fn test_unify_4_succeed() {
+    fn test_unify_4_succeeds() {
         let x1 = Term::Var(Var::new("X", 0));
         let x2 = Term::Var(Var::new("X", 0));;
 
@@ -430,7 +443,7 @@ mod tests {
     }
 
     #[test]
-    fn test_unify_5_succeed() {
+    fn test_unify_5_succeeds() {
         let a1 = Term::Const(Const::new("a"));
         let a2 = Term::Const(Const::new("a"));
 
@@ -440,7 +453,7 @@ mod tests {
 
     #[test]
     #[should_panic]
-    fn test_unify_5_fail() {
+    fn test_unify_5_fails() {
         let a1 = Term::Const(Const::new("a"));
         let a2 = Term::Const(Const::new("b"));
 
@@ -449,7 +462,7 @@ mod tests {
     }
 
     #[test]
-    fn test_unify_6_succeed() {
+    fn test_unify_6_succeeds() {
         let x = Term::Atom(Atom::new(
             "foo",
             vec![Term::Atom(Atom::new(
@@ -476,7 +489,7 @@ mod tests {
     }
 
     #[test]
-    fn test_unify_7_succeed() {
+    fn test_unify_7_succeeds() {
         let p1 = Term::Atom(Atom::new(
             "p",
             vec![
@@ -529,7 +542,7 @@ mod tests {
 
     #[test]
     #[should_panic]
-    fn test_unify_7_fail() {
+    fn test_unify_7_fails() {
         let p1 = Term::Atom(Atom::new(
             "p",
             vec![
