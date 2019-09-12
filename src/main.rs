@@ -25,10 +25,10 @@ fn main() {
         if query.len() == 1 && query[0].name == consult_const && query[0].arity == 1 {
             if let Term::Atom(Atom { name: Const(p), .. }) = &query[0].args[0] {
                 source = read_source_code(p);
-                solve_toplevel(&source, (&query[1..]).to_vec());
+                solve_toplevel(true, &source, (&query[1..]).to_vec());
             }
         } else {
-            solve_toplevel(&source, query);
+            solve_toplevel(true, &source, query);
         }
     }
 }

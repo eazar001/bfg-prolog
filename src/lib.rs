@@ -296,7 +296,7 @@ fn reduce_atom(
     }
 }
 
-pub fn solve_toplevel(kb: &[Assertion], c: Clause) {
+pub fn solve_toplevel(interactive: bool, kb: &[Assertion], c: Clause) {
     let env = Environment::new();
     let asrl = kb.to_vec();
     let mut s = solve(&[], kb, &asrl, &env, &c, 1);
@@ -320,11 +320,15 @@ pub fn solve_toplevel(kb: &[Assertion], c: Clause) {
                     .read_line(&mut input_buffer)
                     .expect("error reading input");
 
-                match &input_buffer[..] {
-                    ";\r\n" | ";\n" => {
-                        s = continue_search(kb, ch);
+                if interactive {
+                    match &input_buffer[..] {
+                        ";\r\n" | ";\n" => {
+                            s = continue_search(kb, ch);
+                        }
+                        _ => break,
                     }
-                    _ => break,
+                } else {
+                    s = continue_search(kb, ch);
                 }
             }
             Ok(Solution::Answer(answer)) => {
