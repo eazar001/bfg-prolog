@@ -28,7 +28,8 @@ fn parse_query(query: &str) -> Clause {
 }
 
 fn compare_answers(answers: Vec<String>, expected: &[&str]) {
-    let answers: Vec<&str> = answers.iter().map(|s| s.trim()).collect();
+    let mut answers: Vec<&str> = answers.iter().map(|s| s.trim()).collect();
+    answers.sort();
     assert_eq!(answers, expected);
 }
 
@@ -41,7 +42,7 @@ fn test_the_expanse_program_1_succeeds() {
 
     compare_answers(
         results,
-        &["X = 'James Holden'", "X = 'Naomi Nagata'", "X = 'McDowell'"],
+        &["X = 'James Holden'", "X = 'McDowell'", "X = 'Naomi Nagata'"],
     )
 }
 
@@ -65,8 +66,8 @@ fn test_the_expanse_program_2_succeeds() {
     compare_answers(
         results,
         &[
-            "X = 'James Holden'\nS = 'Rocinante'",
-            "X = 'McDowell'\nS = 'Canterbury'",
+            "S = 'Canterbury'\nX = 'McDowell'",
+            "S = 'Rocinante'\nX = 'James Holden'",
         ],
     )
 }
