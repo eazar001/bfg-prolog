@@ -38,7 +38,8 @@ struct ChoicePoint {
 
 impl Display for Environment {
     fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
-        let env: Vec<_> = self.0.iter().filter(|(Var(_, n), _t)| *n == 0).collect();
+        let mut env: Vec<_> = self.0.iter().filter(|(Var(_, n), _t)| *n == 0).collect();
+        env.sort();
         let mut response = String::from("\n");
         let last = env.last().cloned();
 
@@ -309,7 +310,7 @@ pub fn solve_toplevel(interactive: bool, kb: &[Assertion], c: Clause) -> Vec<Str
             Err(SolveErr::NoSolution) => {
                 println!("\nNo.");
                 if !interactive {
-                    answers.push(String::from("No."))
+                    answers.push(String::from("No"))
                 }
                 break;
             }
