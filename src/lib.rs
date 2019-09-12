@@ -339,4 +339,220 @@ pub fn solve_toplevel(kb: &[Assertion], c: Clause) {
 mod tests {
     use super::*;
 
+    fn unification_result(env: &Environment, results: &mut [(Var, Term)]) {
+        let mut env: Vec<_> = env.0.iter().map(|(v, t)| (v.clone(), t.clone())).collect();
+        env.sort();
+        results.sort();
+        assert_eq!(env, results);
+    }
+
+    #[test]
+    fn test_unify_1_succeed() {
+        let x = Term::Atom(Atom::new(
+            "foo",
+            vec![Term::Atom(Atom::new(
+                "bar",
+                vec![Term::Var(Var::new("X", 0))],
+            ))],
+        ));
+        let f = Term::Atom(Atom::new(
+            "foo",
+            vec![Term::Atom(Atom::new(
+                "bar",
+                vec![Term::Const(Const::new("z"))],
+            ))],
+        ));
+
+        let env = Environment::new().unify_terms(&x, &f);
+        unification_result(
+            &env.unwrap(),
+            &mut [(Var::new("X", 0), Term::Const(Const::new("z")))],
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_unify_1_fail() {
+        let x = Term::Atom(Atom::new(
+            "foo",
+            vec![Term::Atom(Atom::new(
+                "baz",
+                vec![Term::Var(Var::new("X", 0))],
+            ))],
+        ));
+        let f = Term::Atom(Atom::new(
+            "foo",
+            vec![Term::Atom(Atom::new(
+                "bar",
+                vec![Term::Const(Const::new("z"))],
+            ))],
+        ));
+
+        let env = Environment::new().unify_terms(&x, &f);
+        env.unwrap();
+    }
+
+    #[test]
+    fn test_unify_2_succeed() {
+        let x = Term::Var(Var::new("X", 0));
+        let f = Term::Atom(Atom::new(
+            "foo",
+            vec![Term::Atom(Atom::new(
+                "bar",
+                vec![Term::Const(Const::new("a"))],
+            ))],
+        ));
+
+        let env = Environment::new().unify_terms(&f, &x);
+        unification_result(&env.unwrap(), &mut [(Var::new("X", 0), f)]);
+    }
+
+    #[test]
+    fn test_unify_3_succeed() {
+        let x = Term::Var(Var::new("X", 0));
+        let y = Term::Var(Var::new("Y", 0));;
+
+        let env = Environment::new().unify_terms(&x, &y);
+        unification_result(&env.unwrap(), &mut [(Var::new("X", 0), y)]);
+    }
+
+    #[test]
+    fn test_unify_4_succeed() {
+        let x1 = Term::Var(Var::new("X", 0));
+        let x2 = Term::Var(Var::new("X", 0));;
+
+        let env = Environment::new().unify_terms(&x1, &x2);
+        unification_result(&env.unwrap(), &mut []);
+    }
+
+    #[test]
+    fn test_unify_5_succeed() {
+        let a1 = Term::Const(Const::new("a"));
+        let a2 = Term::Const(Const::new("a"));
+
+        let env = Environment::new().unify_terms(&a1, &a2);
+        unification_result(&env.unwrap(), &mut []);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_unify_5_fail() {
+        let a1 = Term::Const(Const::new("a"));
+        let a2 = Term::Const(Const::new("b"));
+
+        let env = Environment::new().unify_terms(&a1, &a2);
+        env.unwrap();
+    }
+
+    #[test]
+    fn test_unify_6_succeed() {
+        let x = Term::Atom(Atom::new(
+            "foo",
+            vec![Term::Atom(Atom::new(
+                "bar",
+                vec![Term::Var(Var::new("X", 0)), Term::Const(Const::new("q"))],
+            ))],
+        ));
+        let f = Term::Atom(Atom::new(
+            "foo",
+            vec![Term::Atom(Atom::new(
+                "bar",
+                vec![Term::Const(Const::new("z")), Term::Var(Var::new("V", 0))],
+            ))],
+        ));
+
+        let env = Environment::new().unify_terms(&x, &f);
+        unification_result(
+            &env.unwrap(),
+            &mut [
+                (Var::new("V", 0), Term::Const(Const::new("q"))),
+                (Var::new("X", 0), Term::Const(Const::new("z"))),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_unify_7_succeed() {
+        let p1 = Term::Atom(Atom::new(
+            "p",
+            vec![
+                Term::Var(Var::new("Z", 0)),
+                Term::Atom(Atom::new(
+                    "h",
+                    vec![Term::Var(Var::new("Z", 0)), Term::Var(Var::new("W", 0))],
+                )),
+                Term::Atom(Atom::new("f", vec![Term::Var(Var::new("W", 0))])),
+            ],
+        ));
+        let p2 = Term::Atom(Atom::new(
+            "p",
+            vec![
+                Term::Atom(Atom::new("f", vec![Term::Var(Var::new("X", 0))])),
+                Term::Atom(Atom::new(
+                    "h",
+                    vec![
+                        Term::Var(Var::new("Y", 0)),
+                        Term::Atom(Atom::new("f", vec![Term::Const(Const::new("a"))])),
+                    ],
+                )),
+                Term::Var(Var::new("Y", 0)),
+            ],
+        ));
+
+        let env = Environment::new().unify_terms(&p1, &p2);
+        unification_result(
+            &env.unwrap(),
+            &mut [
+                (
+                    Var::new("W", 0),
+                    Term::Atom(Atom::new("f", vec![Term::Const(Const::new("a"))])),
+                ),
+                (
+                    Var::new("X", 0),
+                    Term::Atom(Atom::new("f", vec![Term::Const(Const::new("a"))])),
+                ),
+                (
+                    Var::new("Y", 0),
+                    Term::Atom(Atom::new("f", vec![Term::Var(Var::new("X", 0))])),
+                ),
+                (
+                    Var::new("Z", 0),
+                    Term::Atom(Atom::new("f", vec![Term::Var(Var::new("X", 0))])),
+                ),
+            ],
+        )
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_unify_7_fail() {
+        let p1 = Term::Atom(Atom::new(
+            "p",
+            vec![
+                Term::Var(Var::new("Z", 0)),
+                Term::Atom(Atom::new(
+                    "g",
+                    vec![Term::Var(Var::new("Z", 0)), Term::Var(Var::new("W", 0))],
+                )),
+                Term::Atom(Atom::new("f", vec![Term::Var(Var::new("W", 0))])),
+            ],
+        ));
+        let p2 = Term::Atom(Atom::new(
+            "p",
+            vec![
+                Term::Atom(Atom::new("f", vec![Term::Var(Var::new("X", 0))])),
+                Term::Atom(Atom::new(
+                    "h",
+                    vec![
+                        Term::Var(Var::new("Y", 0)),
+                        Term::Atom(Atom::new("f", vec![Term::Const(Const::new("a"))])),
+                    ],
+                )),
+                Term::Var(Var::new("Y", 0)),
+            ],
+        ));
+
+        let env = Environment::new().unify_terms(&p1, &p2);
+        env.unwrap();
+    }
 }
