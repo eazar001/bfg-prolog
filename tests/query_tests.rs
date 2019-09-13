@@ -222,6 +222,36 @@ fn test_basic_14_succeeds() {
 }
 
 #[test]
+fn test_basic_15_succeeds() {
+    let source = read_source_code("tests/example_programs/basic/basic.pl");
+    let query = parse_query("unify(p(Z, h(Z, W), f(W)), p(f(X), h(Y, f(a)), Y)).");
+
+    let results = solve_toplevel(false, &source, query);
+
+    compare_answers(results, &["W = f(a)\nX = f(a)\nY = f(f(a))\nZ = f(f(a))"]);
+}
+
+#[test]
+fn test_basic_16_succeeds() {
+    let source = read_source_code("tests/example_programs/basic/basic.pl");
+    let query = parse_query("unify(f(X, g(X, a)), f(b, Y)).");
+
+    let results = solve_toplevel(false, &source, query);
+
+    compare_answers(results, &["X = b\nY = g(b, a)"]);
+}
+
+#[test]
+fn test_basic_17_succeeds() {
+    let source = read_source_code("tests/example_programs/basic/basic.pl");
+    let query = parse_query("unify(f(X), X).");
+
+    let results = solve_toplevel(false, &source, query);
+
+    compare_answers(results, &["No"]);
+}
+
+#[test]
 fn test_the_expanse_program_1_succeeds() {
     let source = read_source_code("tests/example_programs/the_expanse/the_expanse.pl");
     let query = parse_query("leader(X).");

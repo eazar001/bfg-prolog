@@ -573,4 +573,252 @@ mod tests {
         let env = Environment::new().unify_terms(&p1, &p2);
         env.unwrap();
     }
+
+    #[test]
+    fn test_unify_8_succeeds() {
+        let f1 = Term::Atom(Atom::new(
+            "f",
+            vec![
+                Term::Var(Var::new("X", 0)),
+                Term::Atom(Atom::new(
+                    "g",
+                    vec![
+                        Term::Var(Var::new("X", 0)),
+                        Term::Atom(Atom::new("a", vec![])),
+                    ],
+                )),
+            ],
+        ));
+        let f2 = Term::Atom(Atom::new(
+            "f",
+            vec![
+                Term::Atom(Atom::new("b", vec![])),
+                Term::Var(Var::new("Y", 0)),
+            ],
+        ));
+
+        let env = Environment::new().unify_terms(&f1, &f2);
+        unification_result(
+            &env.unwrap(),
+            &mut [
+                (Var::new("X", 0), Term::Atom(Atom::new("b", vec![]))),
+                (
+                    Var::new("Y", 0),
+                    Term::Atom(Atom::new(
+                        "g",
+                        vec![
+                            Term::Atom(Atom::new("b", vec![])),
+                            Term::Atom(Atom::new("a", vec![])),
+                        ],
+                    )),
+                ),
+            ],
+        )
+    }
+
+    #[test]
+    fn test_unify_9_succeeds() {
+        let f1 = Atom::new(
+            "f",
+            vec![
+                Term::Var(Var::new("X", 0)),
+                Term::Atom(Atom::new(
+                    "g",
+                    vec![
+                        Term::Var(Var::new("X", 0)),
+                        Term::Atom(Atom::new("a", vec![])),
+                    ],
+                )),
+            ],
+        );
+        let f2 = Atom::new(
+            "f",
+            vec![
+                Term::Atom(Atom::new("b", vec![])),
+                Term::Var(Var::new("Y", 0)),
+            ],
+        );
+
+        let env = Environment::new().unify_atoms(&f1, &f2);
+        unification_result(
+            &env.unwrap(),
+            &mut [
+                (Var::new("X", 0), Term::Atom(Atom::new("b", vec![]))),
+                (
+                    Var::new("Y", 0),
+                    Term::Atom(Atom::new(
+                        "g",
+                        vec![
+                            Term::Atom(Atom::new("b", vec![])),
+                            Term::Atom(Atom::new("a", vec![])),
+                        ],
+                    )),
+                ),
+            ],
+        )
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_unify_9_fails() {
+        let f1 = Atom::new(
+            "f",
+            vec![
+                Term::Var(Var::new("X", 0)),
+                Term::Atom(Atom::new(
+                    "g",
+                    vec![
+                        Term::Var(Var::new("X", 0)),
+                        Term::Atom(Atom::new("a", vec![])),
+                    ],
+                )),
+            ],
+        );
+        let f2 = Atom::new(
+            "f",
+            vec![
+                Term::Atom(Atom::new("b", vec![])),
+                Term::Var(Var::new("X", 0)),
+            ],
+        );
+
+        let env = Environment::new().unify_atoms(&f1, &f2);
+        env.unwrap();
+    }
+
+    #[test]
+    fn test_unify_10_succeeds() {
+        let l1 = vec![Term::Atom(Atom::new("a", vec![]))];
+        let l2 = vec![Term::Var(Var::new("X", 1))];
+        let env = Environment::new().unify_lists(&l1, &l2);
+
+        unification_result(
+            &env.unwrap(),
+            &mut [(Var::new("X", 1), Term::Atom(Atom::new("a", vec![])))],
+        )
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_unify_10_fails() {
+        let l1 = vec![
+            Term::Atom(Atom::new("a", vec![])),
+            Term::Atom(Atom::new("a", vec![])),
+        ];
+        let l2 = vec![Term::Var(Var::new("X", 0))];
+        let env = Environment::new().unify_lists(&l1, &l2);
+
+        env.unwrap();
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_unify_11_fails() {
+        let l1 = vec![Term::Atom(Atom::new("a", vec![]))];
+        let l2 = vec![Term::Atom(Atom::new("b", vec![]))];
+        let env = Environment::new().unify_lists(&l1, &l2);
+
+        env.unwrap();
+    }
+
+    #[test]
+    fn test_unify_12_succeeds() {
+        let l1 = vec![
+            Term::Atom(Atom::new(
+                "a",
+                vec![Term::Atom(Atom::new(
+                    "x",
+                    vec![Term::Const(Const::new("c"))],
+                ))],
+            )),
+            Term::Atom(Atom::new("b", vec![])),
+        ];
+        let l2 = vec![
+            Term::Atom(Atom::new("a", vec![Term::Var(Var::new("X", 0))])),
+            Term::Atom(Atom::new("b", vec![])),
+        ];
+        let env = Environment::new().unify_lists(&l1, &l2);
+
+        unification_result(
+            &env.unwrap(),
+            &mut [(
+                Var::new("X", 0),
+                Term::Atom(Atom::new("x", vec![Term::Const(Const::new("c"))])),
+            )],
+        )
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_unify_12_fails() {
+        let l1 = vec![
+            Term::Atom(Atom::new(
+                "a",
+                vec![Term::Atom(Atom::new(
+                    "x",
+                    vec![Term::Const(Const::new("c"))],
+                ))],
+            )),
+            Term::Atom(Atom::new("q", vec![])),
+        ];
+        let l2 = vec![
+            Term::Atom(Atom::new("a", vec![Term::Var(Var::new("X", 0))])),
+            Term::Atom(Atom::new("b", vec![])),
+        ];
+        let env = Environment::new().unify_lists(&l1, &l2);
+
+        env.unwrap();
+    }
+
+    #[test]
+    fn test_occurs_1_succeeds() {
+        let v = Var::new("X", 0);
+        let t = Term::Var(Var::new("X", 0));
+
+        assert!(occurs(&v, &t))
+    }
+
+    #[test]
+    fn test_occurs_1_fails() {
+        let v = Var::new("X", 0);
+        let t = Term::Var(Var::new("X", 1));
+
+        assert!(!occurs(&v, &t))
+    }
+
+    #[test]
+    fn test_occurs_2_fails() {
+        let v = Var::new("X", 0);
+        let t = Term::Var(Var::new("Y", 0));
+
+        assert!(!occurs(&v, &t))
+    }
+
+    #[test]
+    fn test_occurs_3_succeeds() {
+        let v = Var::new("X", 0);
+        let t = Term::Atom(Atom::new(
+            "x",
+            vec![Term::Atom(Atom::new(
+                "y",
+                vec![Term::Var(Var::new("X", 0))],
+            ))],
+        ));
+
+        assert!(occurs(&v, &t))
+    }
+
+    #[test]
+    fn test_occurs_3_fails() {
+        let v = Var::new("X", 0);
+        let t = Term::Atom(Atom::new(
+            "x",
+            vec![Term::Atom(Atom::new(
+                "y",
+                vec![Term::Var(Var::new("Var", 0))],
+            ))],
+        ));
+
+        assert!(!occurs(&v, &t))
+    }
 }
