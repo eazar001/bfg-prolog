@@ -10,7 +10,8 @@ lalrpop_mod!(pub parser);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Environment(HashMap<Var, Term>);
-pub type Database = Vec<Assertion>;
+pub type KnowledgeBase = Vec<Assertion>;
+pub type Assertions = Vec<Assertion>;
 
 #[derive(Debug, Copy, Clone)]
 enum UnifyErr {
@@ -25,12 +26,12 @@ enum SolveErr {
 #[derive(Debug, Clone)]
 enum Solution {
     Answer(String),
-    Continuation(String, (Database, Vec<ChoicePoint>)),
+    Continuation(String, (KnowledgeBase, Vec<ChoicePoint>)),
 }
 
 #[derive(Debug, Clone)]
 struct ChoicePoint {
-    database: Database,
+    assertions: KnowledgeBase,
     environment: Environment,
     clause: Clause,
     depth: usize,
@@ -38,7 +39,7 @@ struct ChoicePoint {
 
 impl Display for Environment {
     fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
-        let mut env: Vec<_> = self.0.iter().filter(|(Var(_, n), _t)| *n == 0).collect();
+        let mut env: Vec<_> = self.0.iter().filter(|(Var(_, n), _)| *n == 0).collect();
         env.sort();
         let mut response = String::from("\n");
         let last = env.last().cloned();
@@ -46,7 +47,7 @@ impl Display for Environment {
         match last {
             None => Ok(write!(f, "Yes")?),
             Some((Var(last_x, _), last_t)) => {
-                for (Var(x, _n), t) in &env[..env.len() - 1] {
+                for (Var(x, _), t) in &env[..env.len() - 1] {
                     response.push_str(&format!("{} = {}\n", x, self.substitute_term(t)))
                 }
 
@@ -172,6 +173,81 @@ impl Environment {
 
         Err(UnifyErr::NoUnify)
     }
+
+    fn reduce_atom(
+        &self,
+        n: usize,
+        a: &Atom,
+        asrl: &[Assertion],
+    ) -> Option<(KnowledgeBase, Environment, Clause)> {
+        match asrl.split_first() {
+            None => None,
+            Some((
+                Assertion {
+                    head: b,
+                    clause: lst,
+                },
+                next_asrl,
+            )) => {
+                let next_env = self.unify_atoms(a, &renumber_atom(n, b));
+
+                match next_env {
+                    Ok(next_env) => Some((
+                        next_asrl.to_vec(),
+                        next_env,
+                        lst.iter().map(|a| renumber_atom(n, a)).collect(),
+                    )),
+                    Err(UnifyErr::NoUnify) => self.reduce_atom(n, a, next_asrl),
+                }
+            }
+        }
+    }
+
+    fn solve(
+        &self,
+        ch: &[ChoicePoint],
+        kb: &[Assertion],
+        asrl: &[Assertion],
+        c: &[Atom],
+        n: usize,
+    ) -> Result<Solution, SolveErr> {
+        match c.split_first() {
+            None => Ok(match (&self.to_string()[..], ch) {
+                (answer, []) => Solution::Answer(String::from(answer)),
+                (answer, ch) => {
+                    let answer = if answer == "Yes" { "Yes " } else { answer };
+
+                    Solution::Continuation(String::from(answer), (kb.to_vec(), ch.to_vec()))
+                }
+            }),
+            Some((
+                Atom {
+                    name: Const(ref n),
+                    arity,
+                    ..
+                },
+                _,
+            )) if n == "halt" && *arity == 0 => {
+                std::process::exit(0);
+            }
+            Some((a, next_c)) => match self.reduce_atom(n, a, asrl) {
+                None => continue_search(kb, ch),
+                Some((next_asrl, next_env, mut d)) => {
+                    let mut next_ch = vec![ChoicePoint {
+                        assertions: next_asrl,
+                        environment: self.clone(),
+                        clause: c.to_vec(),
+                        depth: n,
+                    }];
+
+                    next_ch.extend_from_slice(&ch);
+                    d.extend_from_slice(next_c);
+
+                    next_env.solve(&next_ch, kb, kb, &d, n + 1)
+                }
+            },
+        }
+    }
 }
 
 fn occurs(x: &Var, t: &Term) -> bool {
@@ -212,95 +288,20 @@ fn continue_search(kb: &[Assertion], ch: &[ChoicePoint]) -> Result<Solution, Sol
         None => Err(SolveErr::NoSolution),
         Some((
             ChoicePoint {
-                database: asrl,
+                assertions: asrl,
                 environment: env,
                 clause: gs,
                 depth: n,
             },
             cs,
-        )) => solve(cs, kb, asrl, env, gs, *n),
-    }
-}
-
-fn solve(
-    ch: &[ChoicePoint],
-    kb: &[Assertion],
-    asrl: &[Assertion],
-    env: &Environment,
-    c: &[Atom],
-    n: usize,
-) -> Result<Solution, SolveErr> {
-    match c.split_first() {
-        None => Ok(match (&env.to_string()[..], ch) {
-            (answer, []) => Solution::Answer(String::from(answer)),
-            (answer, ch) => {
-                let answer = if answer == "Yes" { "Yes " } else { answer };
-
-                Solution::Continuation(String::from(answer), (kb.to_vec(), ch.to_vec()))
-            }
-        }),
-        Some((
-            Atom {
-                name: Const(ref n),
-                arity,
-                ..
-            },
-            _,
-        )) if n == "halt" && *arity == 0 => {
-            std::process::exit(0);
-        }
-        Some((a, next_c)) => match reduce_atom(env, n, a, asrl) {
-            None => continue_search(kb, ch),
-            Some((next_asrl, next_env, mut d)) => {
-                let mut next_ch = vec![ChoicePoint {
-                    database: next_asrl,
-                    environment: env.clone(),
-                    clause: c.to_vec(),
-                    depth: n,
-                }];
-
-                next_ch.extend_from_slice(&ch);
-                d.extend_from_slice(next_c);
-
-                solve(&next_ch, kb, kb, &next_env, &d, n + 1)
-            }
-        },
-    }
-}
-
-fn reduce_atom(
-    env: &Environment,
-    n: usize,
-    a: &Atom,
-    asrl: &[Assertion],
-) -> Option<(Vec<Assertion>, Environment, Vec<Atom>)> {
-    match asrl.split_first() {
-        None => None,
-        Some((
-            Assertion {
-                head: b,
-                clause: lst,
-            },
-            next_asrl,
-        )) => {
-            let next_env = env.unify_atoms(a, &renumber_atom(n, b));
-
-            match next_env {
-                Ok(next_env) => Some((
-                    next_asrl.to_vec(),
-                    next_env,
-                    lst.iter().map(|a| renumber_atom(n, a)).collect(),
-                )),
-                Err(UnifyErr::NoUnify) => reduce_atom(env, n, a, next_asrl),
-            }
-        }
+        )) => env.solve(cs, kb, asrl, gs, *n),
     }
 }
 
 pub fn solve_toplevel(interactive: bool, kb: &[Assertion], c: Clause) -> Vec<String> {
     let env = Environment::new();
     let asrl = kb.to_vec();
-    let mut s = solve(&[], kb, &asrl, &env, &c, 1);
+    let mut s = env.solve(&[], kb, &asrl, &c, 1);
     let mut answers = Vec::new();
     let mut found = false;
 
