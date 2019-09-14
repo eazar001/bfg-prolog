@@ -260,7 +260,7 @@ fn test_the_expanse_program_1_succeeds() {
 
     compare_answers(
         results,
-        &["X = 'James Holden'", "X = 'Naomi Nagata'", "X = 'McDowell'"],
+        &["X = 'James Holden'", "X = 'McDowell'", "X = 'Naomi Nagata'"],
     )
 }
 

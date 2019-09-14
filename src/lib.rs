@@ -252,14 +252,14 @@ fn solve(
         Some((a, next_c)) => match reduce_atom(env, n, a, asrl) {
             None => continue_search(kb, ch),
             Some((next_asrl, next_env, mut d)) => {
-                let mut next_ch = ch.to_vec();
-                next_ch.push(ChoicePoint {
+                let mut next_ch = vec![ChoicePoint {
                     database: next_asrl,
                     environment: env.clone(),
                     clause: c.to_vec(),
                     depth: n,
-                });
+                }];
 
+                next_ch.extend_from_slice(&ch);
                 d.extend_from_slice(next_c);
 
                 solve(&next_ch, kb, kb, &next_env, &d, n + 1)
