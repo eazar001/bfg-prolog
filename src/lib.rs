@@ -268,9 +268,7 @@ fn occurs(x: &Var, t: &Term) -> bool {
 fn occurs_atom(x: &Var, a: &Atom) -> bool {
     let mut atom_queue = vec![a];
 
-    while !atom_queue.is_empty() {
-        let a = atom_queue.pop().unwrap();
-
+    while let Some(a) = atom_queue.pop() {
         for t in &a.args {
             match t {
                 Term::Var(y) if x == y => return true,
