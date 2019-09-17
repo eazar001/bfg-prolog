@@ -261,8 +261,26 @@ fn occurs(x: &Var, t: &Term) -> bool {
     match t {
         Term::Var(y) => x == y,
         Term::Const(_) => false,
-        Term::Atom(Atom { args, .. }) => args.iter().any(|t| occurs(x, t)),
+        Term::Atom(a) => occurs_atom(x, a),
     }
+}
+
+fn occurs_atom(x: &Var, a: &Atom) -> bool {
+    let mut atom_queue = vec![a];
+
+    while !atom_queue.is_empty() {
+        let a = atom_queue.pop().unwrap();
+
+        for t in &a.args {
+            match t {
+                Term::Var(y) if x == y => return true,
+                Term::Atom(ref q) => atom_queue.push(q),
+                _ => (),
+            }
+        }
+    }
+
+    false
 }
 
 fn renumber_term(n: usize, t: &Term) -> Term {
