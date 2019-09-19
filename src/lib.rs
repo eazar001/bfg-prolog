@@ -236,7 +236,24 @@ impl Environment {
             }
 
             match env.reduce_atom(n, a, &asrl) {
-                None => return continue_search(&kb, &ch),
+                None => match ch.clone().split_first() {
+                    None => return Err(SolveErr::NoSolution),
+                    Some((
+                        ChoicePoint {
+                            assertions: next_asrl,
+                            environment: next_env,
+                            clause: gs,
+                            depth: next_n,
+                        },
+                        cs,
+                    )) => {
+                        env = next_env.clone();
+                        ch = cs.to_vec();
+                        asrl = next_asrl.to_vec();
+                        c = gs.clone();
+                        n = *next_n;
+                    }
+                },
                 Some((next_asrl, next_env, mut d)) => {
                     let mut ch_buffer = vec![ChoicePoint {
                         assertions: next_asrl,
