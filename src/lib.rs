@@ -217,57 +217,64 @@ impl Environment {
     fn solve(
         &self,
         mut ch: Vec<ChoicePoint>,
-        kb: KnowledgeBase,
-        mut asrl: Vec<Assertion>,
+        kb: &[Assertion],
+        asrl: &[Assertion],
         mut c: Clause,
         mut n: usize,
     ) -> Result<Solution, SolveErr> {
         let mut env = self.clone();
+        let mut asrl = asrl;
+        let mut next_asrl = Some(asrl.to_vec());
+        c.reverse();
 
-        while let Some((a, next_c)) = c.split_first() {
+        while let Some(a) = c.pop() {
             let Atom {
                 name: Const(ref atom_name),
                 arity,
                 ..
             } = a;
 
-            if atom_name == "halt" && *arity == 0 {
+            if atom_name == "halt" && arity == 0 {
                 std::process::exit(0);
             }
 
-            match env.reduce_atom(n, a, &asrl) {
-                None => match ch.clone().split_first() {
+            asrl = match next_asrl {
+                None => kb,
+                Some(ref assertions) => assertions,
+            };
+
+            match env.reduce_atom(n, &a, &asrl) {
+                None => match ch.pop() {
                     None => return Err(SolveErr::NoSolution),
-                    Some((
-                        ChoicePoint {
-                            assertions: next_asrl,
-                            environment: next_env,
-                            clause: gs,
-                            depth: next_n,
-                        },
-                        cs,
-                    )) => {
-                        env = next_env.clone();
-                        ch = cs.to_vec();
-                        asrl = next_asrl.clone();
-                        c = gs.clone();
-                        n = *next_n;
+                    Some(ChoicePoint {
+                        assertions: ch_asrl,
+                        environment: next_env,
+                        clause: gs,
+                        depth: next_n,
+                    }) => {
+                        env = next_env;
+                        next_asrl = Some(ch_asrl);
+                        c = gs;
+                        n = next_n;
                     }
                 },
-                Some((next_asrl, next_env, mut d)) => {
+                Some((ch_asrl, next_env, mut d)) => {
+                    let mut ch_clause = c.clone();
+                    ch_clause.push(a);
+
                     let mut ch_buffer = vec![ChoicePoint {
-                        assertions: next_asrl,
-                        environment: env.clone(),
-                        clause: c.clone(),
+                        assertions: ch_asrl,
+                        environment: env,
+                        clause: ch_clause,
                         depth: n,
                     }];
 
                     ch_buffer.extend_from_slice(&ch);
-                    d.extend_from_slice(next_c);
+                    d.extend_from_slice(&c);
 
                     env = next_env;
-                    ch = ch_buffer.clone();
-                    asrl = kb.clone();
+                    ch = ch_buffer;
+                    next_asrl = None;
                     c = d;
                     n += 1;
                 }
@@ -344,14 +351,14 @@ fn continue_search(kb: &[Assertion], ch: &[ChoicePoint]) -> Result<Solution, Sol
                 depth: n,
             },
             cs,
-        )) => env.solve(cs.to_vec(), kb.to_vec(), asrl.clone(), gs.clone(), *n),
+        )) => env.solve(cs.to_vec(), kb, asrl, gs.clone(), *n),
     }
 }
 
 pub fn solve_toplevel(interactive: bool, kb: &[Assertion], c: Clause) -> Vec<String> {
     let env = Environment::new();
     let asrl = kb.to_vec();
-    let mut s = env.solve(Vec::new(), kb.to_vec(), asrl, c, 1);
+    let mut s = env.solve(Vec::new(), kb, &asrl, c, 1);
     let mut answers = Vec::new();
     let mut found = false;
 
