@@ -216,16 +216,13 @@ impl Environment {
 
     fn solve(
         &self,
-        ch: &[ChoicePoint],
-        kb: &[Assertion],
-        asrl: &[Assertion],
-        c: &[Atom],
+        mut ch: Vec<ChoicePoint>,
+        kb: KnowledgeBase,
+        mut asrl: Vec<Assertion>,
+        mut c: Clause,
         mut n: usize,
     ) -> Result<Solution, SolveErr> {
         let mut env = self.clone();
-        let mut ch = ch.to_vec();
-        let mut asrl = asrl.to_vec();
-        let mut c = c.to_vec();
 
         while let Some((a, next_c)) = c.split_first() {
             let Atom {
@@ -239,7 +236,7 @@ impl Environment {
             }
 
             match env.reduce_atom(n, a, &asrl) {
-                None => return continue_search(kb, &ch),
+                None => return continue_search(&kb, &ch),
                 Some((next_asrl, next_env, mut d)) => {
                     let mut ch_buffer = vec![ChoicePoint {
                         assertions: next_asrl,
@@ -330,14 +327,14 @@ fn continue_search(kb: &[Assertion], ch: &[ChoicePoint]) -> Result<Solution, Sol
                 depth: n,
             },
             cs,
-        )) => env.solve(cs, kb, asrl, gs, *n),
+        )) => env.solve(cs.to_vec(), kb.to_vec(), asrl.to_vec(), gs.to_vec(), *n),
     }
 }
 
 pub fn solve_toplevel(interactive: bool, kb: &[Assertion], c: Clause) -> Vec<String> {
     let env = Environment::new();
     let asrl = kb.to_vec();
-    let mut s = env.solve(&[], kb, &asrl, &c, 1);
+    let mut s = env.solve(Vec::new(), kb.to_vec(), asrl, c, 1);
     let mut answers = Vec::new();
     let mut found = false;
 
