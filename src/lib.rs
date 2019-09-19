@@ -185,29 +185,33 @@ impl Environment {
         &self,
         n: usize,
         a: &Atom,
-        asrl: &[Assertion],
+        mut asrl: &[Assertion],
     ) -> Option<(KnowledgeBase, Environment, Clause)> {
-        match asrl.split_first() {
-            None => None,
-            Some((
-                Assertion {
-                    head: b,
-                    clause: lst,
-                },
-                next_asrl,
-            )) => {
-                let next_env = self.unify_atoms(a, &renumber_atom(n, b));
+        while let Some((
+            Assertion {
+                head: b,
+                clause: lst,
+            },
+            next_asrl,
+        )) = asrl.split_first()
+        {
+            let next_env = self.unify_atoms(a, &renumber_atom(n, b));
 
-                match next_env {
-                    Ok(next_env) => Some((
+            match next_env {
+                Ok(next_env) => {
+                    return Some((
                         next_asrl.to_vec(),
                         next_env,
                         lst.iter().map(|a| renumber_atom(n, a)).collect(),
-                    )),
-                    Err(UnifyErr::NoUnify) => self.reduce_atom(n, a, next_asrl),
+                    ));
+                }
+                Err(UnifyErr::NoUnify) => {
+                    asrl = &next_asrl;
                 }
             }
         }
+
+        None
     }
 
     fn solve(
