@@ -249,7 +249,7 @@ impl Environment {
                     )) => {
                         env = next_env.clone();
                         ch = cs.to_vec();
-                        asrl = next_asrl.to_vec();
+                        asrl = next_asrl.clone();
                         c = gs.clone();
                         n = *next_n;
                     }
@@ -258,7 +258,7 @@ impl Environment {
                     let mut ch_buffer = vec![ChoicePoint {
                         assertions: next_asrl,
                         environment: env.clone(),
-                        clause: c.to_vec(),
+                        clause: c.clone(),
                         depth: n,
                     }];
 
@@ -266,8 +266,8 @@ impl Environment {
                     d.extend_from_slice(next_c);
 
                     env = next_env;
-                    ch = ch_buffer.to_vec();
-                    asrl = kb.to_vec();
+                    ch = ch_buffer.clone();
+                    asrl = kb.clone();
                     c = d;
                     n += 1;
                 }
