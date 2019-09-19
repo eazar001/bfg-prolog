@@ -344,7 +344,7 @@ fn continue_search(kb: &[Assertion], ch: &[ChoicePoint]) -> Result<Solution, Sol
                 depth: n,
             },
             cs,
-        )) => env.solve(cs.to_vec(), kb.to_vec(), asrl.to_vec(), gs.to_vec(), *n),
+        )) => env.solve(cs.to_vec(), kb.to_vec(), asrl.clone(), gs.clone(), *n),
     }
 }
 
