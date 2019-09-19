@@ -220,44 +220,53 @@ impl Environment {
         kb: &[Assertion],
         asrl: &[Assertion],
         c: &[Atom],
-        n: usize,
+        mut n: usize,
     ) -> Result<Solution, SolveErr> {
-        match c.split_first() {
-            None => Ok(match (&self.to_string()[..], ch) {
-                (answer, []) => Solution::Answer(String::from(answer)),
-                (answer, ch) => {
-                    let answer = if answer == "Yes" { "Yes " } else { answer };
+        let mut env = self.clone();
+        let mut ch = ch.to_vec();
+        let mut asrl = asrl.to_vec();
+        let mut c = c.to_vec();
 
-                    Solution::Continuation(String::from(answer), (kb.to_vec(), ch.to_vec()))
-                }
-            }),
-            Some((
-                Atom {
-                    name: Const(ref n),
-                    arity,
-                    ..
-                },
-                _,
-            )) if n == "halt" && *arity == 0 => {
+        while let Some((a, next_c)) = c.split_first() {
+            let Atom {
+                name: Const(ref atom_name),
+                arity,
+                ..
+            } = a;
+
+            if atom_name == "halt" && *arity == 0 {
                 std::process::exit(0);
             }
-            Some((a, next_c)) => match self.reduce_atom(n, a, asrl) {
-                None => continue_search(kb, ch),
+
+            match env.reduce_atom(n, a, &asrl) {
+                None => return continue_search(kb, &ch),
                 Some((next_asrl, next_env, mut d)) => {
-                    let mut next_ch = vec![ChoicePoint {
+                    let mut ch_buffer = vec![ChoicePoint {
                         assertions: next_asrl,
-                        environment: self.clone(),
+                        environment: env.clone(),
                         clause: c.to_vec(),
                         depth: n,
                     }];
 
-                    next_ch.extend_from_slice(&ch);
+                    ch_buffer.extend_from_slice(&ch);
                     d.extend_from_slice(next_c);
 
-                    next_env.solve(&next_ch, kb, kb, &d, n + 1)
+                    env = next_env;
+                    ch = ch_buffer.to_vec();
+                    asrl = kb.to_vec();
+                    c = d;
+                    n += 1;
                 }
-            },
+            }
         }
+
+        Ok(match (&env.to_string()[..], &ch[..]) {
+            (answer, []) => Solution::Answer(String::from(answer)),
+            (answer, ch) => {
+                let answer = if answer == "Yes" { "Yes " } else { answer };
+                Solution::Continuation(String::from(answer), (kb.to_vec(), ch.to_vec()))
+            }
+        })
     }
 }
 
