@@ -96,18 +96,34 @@ impl Environment {
                     temp = t;
                 }
                 Term::Const(_) => return temp,
-                Term::Atom(Atom {
-                    name: Const(name),
-                    args,
-                    ..
-                }) => {
-                    return Term::Atom(Atom::new(
-                        name,
-                        args.iter().map(|t| self.substitute_term(t)).collect(),
-                    ))
+                Term::Atom(a) => {
+                    let mut a = a.clone();
+                    let mut next_atoms = self.substitute_atom(&mut a);
+
+                    while let Some(a) = next_atoms.pop() {
+                        next_atoms.extend(self.substitute_atom(a));
+                    }
+
+                    return Term::Atom(a);
                 }
             }
         }
+    }
+
+    fn substitute_atom<'a>(&self, a: &'a mut Atom) -> Vec<&'a mut Atom> {
+        let mut next = Vec::new();
+
+        for arg in &mut a.args {
+            match arg {
+                ref t @ Term::Var(_) => {
+                    *arg = self.substitute_term(*t);
+                }
+                Term::Atom(ref mut a) => next.push(a),
+                _ => (),
+            }
+        }
+
+        next
     }
 
     fn unify_terms(&self, t1: &Term, t2: &Term) -> Result<Self, UnifyErr> {
