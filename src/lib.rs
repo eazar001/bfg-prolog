@@ -335,25 +335,35 @@ fn renumber_term(n: usize, t: &Term) -> Term {
     match t {
         Term::Var(Var(x, _)) => Term::Var(Var(x.clone(), n)),
         c @ Term::Const(_) => c.clone(),
-        Term::Atom(Atom {
-            name: Const(c),
-            args: ts,
-            ..
-        }) => Term::Atom(Atom::new(
-            c,
-            ts.iter().map(|t| renumber_term(n, t)).collect(),
-        )),
+        Term::Atom(a) => Term::Atom(renumber_atom(n, a)),
     }
 }
 
 fn renumber_atom(n: usize, a: &Atom) -> Atom {
-    let Atom {
-        name: Const(c),
-        args: ts,
-        ..
-    } = a;
+    let mut a = a.clone();
+    let mut next_atoms = renumber_atom_level(n, &mut a);
 
-    Atom::new(c, ts.iter().map(|t| renumber_term(n, t)).collect())
+    while let Some(a) = next_atoms.pop() {
+        next_atoms.extend(renumber_atom_level(n, a));
+    }
+
+    a
+}
+
+fn renumber_atom_level(n: usize, a: &mut Atom) -> Vec<&mut Atom> {
+    let mut next = Vec::new();
+
+    for arg in &mut a.args {
+        match arg {
+            ref t @ Term::Var(_) => {
+                *arg = renumber_term(n, *t);
+            }
+            Term::Atom(ref mut a) => next.push(a),
+            _ => (),
+        }
+    }
+
+    next
 }
 
 fn continue_search(kb: &[Assertion], ch: &[ChoicePoint]) -> Result<Solution, SolveErr> {
