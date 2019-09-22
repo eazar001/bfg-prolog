@@ -99,8 +99,7 @@ impl Environment {
 
                     temp = t;
                 }
-                Term::Atom(a) => {
-                    let mut a = a;
+                Term::Atom(mut a) => {
                     let mut next_atoms = self.substitute_atom(&mut a);
 
                     while let Some(a) = next_atoms.pop() {
