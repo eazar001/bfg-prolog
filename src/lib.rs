@@ -155,9 +155,47 @@ impl Environment {
                     args: ref ts2,
                     ..
                 }),
-            ) if c1 == c2 => self.unify_lists(ts1, ts2),
+            ) if c1 == c2 => {
+                let (mut env, mut next_atoms) = self.unify_list_level(ts1, ts2)?;
+
+                while let Some((a1, a2)) = next_atoms.pop() {
+                    if a1.name != a2.name {
+                        return Err(UnifyErr::NoUnify);
+                    }
+
+                    let (next_env, atoms_buffer) = env.unify_list_level(&a1.args, &a2.args)?;
+                    env = next_env;
+                    next_atoms.extend(atoms_buffer);
+                }
+
+                Ok(env)
+            }
             _ => Err(UnifyErr::NoUnify),
         }
+    }
+
+    fn unify_list_level<'a>(
+        &self,
+        l1: &'a [Term],
+        l2: &'a [Term],
+    ) -> Result<(Environment, Vec<(&'a Atom, &'a Atom)>), UnifyErr> {
+        if l1.len() != l2.len() {
+            return Err(UnifyErr::NoUnify);
+        }
+
+        let mut next_atoms = Vec::new();
+        let terms = l1.iter().zip(l2.iter());
+        let mut env = self.clone();
+
+        for (t1, t2) in terms {
+            if let (Term::Atom(ref a1), Term::Atom(ref a2)) = (t1, t2) {
+                next_atoms.push((a1, a2));
+            } else {
+                env = env.unify_terms(t1, t2)?;
+            }
+        }
+
+        Ok((env, next_atoms))
     }
 
     fn unify_lists(&self, l1: &[Term], l2: &[Term]) -> Result<Self, UnifyErr> {
@@ -169,12 +207,7 @@ impl Environment {
         let mut env = self.clone();
 
         for (t1, t2) in terms {
-            match env.unify_terms(t1, t2) {
-                Err(UnifyErr::NoUnify) => {
-                    return Err(UnifyErr::NoUnify);
-                }
-                Ok(e) => env = e,
-            }
+            env = env.unify_terms(t1, t2)?;
         }
 
         Ok(env)
@@ -612,13 +645,10 @@ mod tests {
                     Var::new("W", 0),
                     Term::Atom(Atom::new("f", vec![Term::Const(Const::new("a"))])),
                 ),
-                (
-                    Var::new("X", 0),
-                    Term::Atom(Atom::new("f", vec![Term::Const(Const::new("a"))])),
-                ),
+                (Var::new("X", 0), Term::Var(Var::new("W", 0))),
                 (
                     Var::new("Y", 0),
-                    Term::Atom(Atom::new("f", vec![Term::Var(Var::new("X", 0))])),
+                    Term::Atom(Atom::new("f", vec![Term::Var(Var::new("W", 0))])),
                 ),
                 (
                     Var::new("Z", 0),
