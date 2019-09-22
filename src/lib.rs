@@ -81,23 +81,26 @@ impl Environment {
     }
 
     fn substitute_term(&self, t: &Term) -> Term {
+        if let Term::Const(_) = t {
+            return t.clone();
+        }
+
         let mut t = t.clone();
         let mut temp = t;
 
         loop {
-            match &temp {
+            match temp {
                 Term::Var(x) => {
-                    t = self.lookup(x);
+                    t = self.lookup(&x);
 
-                    if Term::Var(x.clone()) == t {
+                    if Term::Var(x) == t {
                         return t;
                     }
 
                     temp = t;
                 }
-                Term::Const(_) => return temp,
                 Term::Atom(a) => {
-                    let mut a = a.clone();
+                    let mut a = a;
                     let mut next_atoms = self.substitute_atom(&mut a);
 
                     while let Some(a) = next_atoms.pop() {
@@ -106,6 +109,7 @@ impl Environment {
 
                     return Term::Atom(a);
                 }
+                Term::Const(_) => return temp,
             }
         }
     }
