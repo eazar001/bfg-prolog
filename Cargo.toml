@@ -1,6 +1,6 @@
 [package]
 name = "bfg-prolog"
-version = "0.5.0"
+version = "0.6.0"
 authors = ["Ebrahim Azarisooreh <ebrahim.azarisooreh@gmail.com>"]
 edition = "2018"
 
@@ -8,6 +8,6 @@ edition = "2018"
 lalrpop = "0.17.1"
 
 [dependencies]
-lalrpop = "0.17.1"
+lalrpop = "0.17.2"
 lalrpop-util = "0.17.1"
 regex = "1.1.9"

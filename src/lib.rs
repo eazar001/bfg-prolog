@@ -100,10 +100,11 @@ impl Environment {
                     temp = t;
                 }
                 Term::Atom(mut a) => {
-                    let mut next_atoms = self.substitute_atom(&mut a);
+                    let mut next_atoms = Vec::new();
+                    self.substitute_atom(&mut a, &mut next_atoms);
 
                     while let Some(a) = next_atoms.pop() {
-                        next_atoms.extend(self.substitute_atom(a));
+                        self.substitute_atom(a, &mut next_atoms);
                     }
 
                     return Term::Atom(a);
@@ -113,9 +114,7 @@ impl Environment {
         }
     }
 
-    fn substitute_atom<'a>(&self, a: &'a mut Atom) -> Vec<&'a mut Atom> {
-        let mut next = Vec::new();
-
+    fn substitute_atom<'a>(&self, a: &'a mut Atom, next: &mut Vec<&'a mut Atom>) {
         for arg in &mut a.args {
             match arg {
                 ref t @ Term::Var(_) => {
@@ -125,8 +124,6 @@ impl Environment {
                 _ => (),
             }
         }
-
-        next
     }
 
     fn unify_terms(&self, t1: &Term, t2: &Term) -> Result<Self, UnifyErr> {
@@ -156,16 +153,16 @@ impl Environment {
                     ..
                 }),
             ) if c1 == c2 => {
-                let (mut env, mut next_atoms) = self.unify_list_level(ts1, ts2)?;
+                let mut next_atoms = Vec::new();
+                let mut env = self.unify_list_level(ts1, ts2, &mut next_atoms)?;
 
                 while let Some((a1, a2)) = next_atoms.pop() {
                     if a1.name != a2.name {
                         return Err(UnifyErr::NoUnify);
                     }
 
-                    let (next_env, atoms_buffer) = env.unify_list_level(&a1.args, &a2.args)?;
+                    let next_env = env.unify_list_level(&a1.args, &a2.args, &mut next_atoms)?;
                     env = next_env;
-                    next_atoms.extend(atoms_buffer);
                 }
 
                 Ok(env)
@@ -178,12 +175,12 @@ impl Environment {
         &self,
         l1: &'a [Term],
         l2: &'a [Term],
-    ) -> Result<(Environment, Vec<(&'a Atom, &'a Atom)>), UnifyErr> {
+        next_atoms: &mut Vec<(&'a Atom, &'a Atom)>,
+    ) -> Result<Environment, UnifyErr> {
         if l1.len() != l2.len() {
             return Err(UnifyErr::NoUnify);
         }
 
-        let mut next_atoms = Vec::new();
         let terms = l1.iter().zip(l2.iter());
         let mut env = self.clone();
 
@@ -195,7 +192,7 @@ impl Environment {
             }
         }
 
-        Ok((env, next_atoms))
+        Ok(env)
     }
 
     fn unify_lists(&self, l1: &[Term], l2: &[Term]) -> Result<Self, UnifyErr> {
