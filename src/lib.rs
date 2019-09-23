@@ -200,31 +200,14 @@ impl Environment {
             return Err(UnifyErr::NoUnify);
         }
 
-        let terms = l1.iter().zip(l2.iter());
-        let mut env = self.clone();
-
-        for (t1, t2) in terms {
-            env = env.unify_terms(t1, t2)?;
-        }
-
-        Ok(env)
+        l1.iter()
+            .zip(l2.iter())
+            .fold(Ok(self.clone()), |env, (t1, t2)| env?.unify_terms(t1, t2))
     }
 
     fn unify_atoms(&self, a1: &Atom, a2: &Atom) -> Result<Self, UnifyErr> {
-        let Atom {
-            name: c1,
-            args: ts1,
-            ..
-        } = a1;
-
-        let Atom {
-            name: c2,
-            args: ts2,
-            ..
-        } = a2;
-
-        if c1 == c2 {
-            return self.unify_lists(ts1, ts2);
+        if a1.name == a2.name {
+            return self.unify_lists(&a1.args, &a2.args);
         }
 
         Err(UnifyErr::NoUnify)
