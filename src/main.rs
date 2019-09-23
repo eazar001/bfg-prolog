@@ -48,8 +48,5 @@ fn parse_code(code: &str) -> Vec<Assertion> {
 
 fn parse_query(query: &str) -> Clause {
     let clause_parser = parser::ClauseParser::new();
-    let mut c = clause_parser.parse(query).unwrap();
-    c.reverse();
-
-    c
+    clause_parser.parse(query).unwrap()
 }

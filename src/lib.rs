@@ -277,7 +277,6 @@ impl Environment {
         let mut env = self.clone();
         let mut asrl = asrl;
         let mut next_asrl = Some(asrl.to_vec());
-        c.reverse();
 
         while let Some(a) = c.pop() {
             let Atom {
