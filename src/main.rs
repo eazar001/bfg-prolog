@@ -40,10 +40,7 @@ fn read_source_code(path: &str) -> Vec<Assertion> {
 
 fn parse_code(code: &str) -> Vec<Assertion> {
     let code_parser = parser::CodeParser::new();
-    let mut c = code_parser.parse(code).unwrap();
-    c.reverse();
-
-    c
+    code_parser.parse(code).unwrap()
 }
 
 fn parse_query(query: &str) -> Clause {

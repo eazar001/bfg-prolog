@@ -210,28 +210,27 @@ impl Environment {
         &self,
         n: usize,
         a: &Atom,
-        mut asrl: &[Assertion],
+        asrl: &[Assertion],
     ) -> Option<(KnowledgeBase, Environment, Clause)> {
-        while let Some((
-            Assertion {
-                head: b,
-                clause: lst,
-            },
-            next_asrl,
-        )) = asrl.split_first()
+        let mut asrl = asrl.to_vec();
+
+        while let Some(Assertion {
+            head: ref b,
+            clause: ref lst,
+        }) = asrl.pop()
         {
             let next_env = self.unify_atoms(a, &renumber_atom(n, b));
 
             match next_env {
                 Ok(next_env) => {
                     return Some((
-                        next_asrl.to_vec(),
+                        asrl,
                         next_env,
                         lst.iter().map(|a| renumber_atom(n, a)).collect(),
                     ));
                 }
                 Err(UnifyErr::NoUnify) => {
-                    asrl = &next_asrl;
+                    continue;
                 }
             }
         }
@@ -240,14 +239,14 @@ impl Environment {
     }
 
     fn solve(
-        &self,
+        self,
         mut ch: Vec<ChoicePoint>,
         kb: &[Assertion],
         asrl: &[Assertion],
         mut c: Clause,
         mut n: usize,
     ) -> Result<Solution, SolveErr> {
-        let mut env = self.clone();
+        let mut env = self;
         let mut asrl = asrl;
         let mut next_asrl = Some(asrl.to_vec());
 
@@ -267,7 +266,7 @@ impl Environment {
                 Some(ref assertions) => assertions,
             };
 
-            match env.reduce_atom(n, &a, &asrl) {
+            match env.reduce_atom(n, &a, asrl) {
                 None => match ch.pop() {
                     None => return Err(SolveErr::NoSolution),
                     Some(ChoicePoint {
