@@ -26,11 +26,11 @@ enum SolveErr {
 #[derive(Debug, Clone)]
 enum Solution {
     Answer(String),
-    Continuation(String, Vec<ChoicePoint>),
+    Choicepoint(String, Vec<Choicepoint>),
 }
 
 #[derive(Debug, Clone)]
-struct ChoicePoint {
+struct Choicepoint {
     assertions: KnowledgeBase,
     environment: Environment,
     clause: Clause,
@@ -240,7 +240,7 @@ impl Environment {
 
     fn solve(
         self,
-        mut ch: Vec<ChoicePoint>,
+        mut ch: Vec<Choicepoint>,
         kb: &[Assertion],
         asrl: &[Assertion],
         mut c: Clause,
@@ -269,7 +269,7 @@ impl Environment {
             match env.reduce_atom(n, &a, asrl) {
                 None => match ch.pop() {
                     None => return Err(SolveErr::NoSolution),
-                    Some(ChoicePoint {
+                    Some(Choicepoint {
                         assertions: ch_asrl,
                         environment: next_env,
                         clause: gs,
@@ -285,7 +285,7 @@ impl Environment {
                     let mut ch_clause = c.clone();
                     ch_clause.push(a);
 
-                    let mut ch_buffer = vec![ChoicePoint {
+                    let mut ch_buffer = vec![Choicepoint {
                         assertions: ch_asrl,
                         environment: env,
                         clause: ch_clause,
@@ -308,7 +308,7 @@ impl Environment {
             (answer, []) => Solution::Answer(String::from(answer)),
             (answer, _) => {
                 let answer = if answer == "Yes" { "Yes " } else { answer };
-                Solution::Continuation(String::from(answer), ch)
+                Solution::Choicepoint(String::from(answer), ch)
             }
         })
     }
@@ -370,10 +370,10 @@ fn renumber_atom_level<'a>(n: usize, a: &'a mut Atom, next: &mut Vec<&'a mut Ato
     }
 }
 
-fn continue_search(kb: &[Assertion], mut ch: Vec<ChoicePoint>) -> Result<Solution, SolveErr> {
+fn continue_search(kb: &[Assertion], mut ch: Vec<Choicepoint>) -> Result<Solution, SolveErr> {
     match ch.pop() {
         None => Err(SolveErr::NoSolution),
-        Some(ChoicePoint {
+        Some(Choicepoint {
             assertions: asrl,
             environment: env,
             clause: gs,
@@ -399,7 +399,7 @@ pub fn solve_toplevel(interactive: bool, kb: &[Assertion], c: Clause) -> Vec<Str
                 }
                 break;
             }
-            Ok(Solution::Continuation(answer, ch)) => {
+            Ok(Solution::Choicepoint(answer, ch)) => {
                 found = true;
 
                 print!("{}", answer);
