@@ -389,7 +389,7 @@ fn continue_search(kb: Vec<Assertion>, mut ch: Vec<ChoicePoint>) -> Result<Solut
             environment: env,
             clause: gs,
             depth: n,
-        }) => env.solve(ch, &kb, &asrl, gs.clone(), n),
+        }) => env.solve(ch, &kb, &asrl, gs, n),
     }
 }
 
