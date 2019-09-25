@@ -381,18 +381,15 @@ fn renumber_atom_level(n: usize, a: &mut Atom) -> Vec<&mut Atom> {
     next
 }
 
-fn continue_search(kb: &[Assertion], ch: &[ChoicePoint]) -> Result<Solution, SolveErr> {
-    match ch.split_first() {
+fn continue_search(kb: Vec<Assertion>, mut ch: Vec<ChoicePoint>) -> Result<Solution, SolveErr> {
+    match ch.pop() {
         None => Err(SolveErr::NoSolution),
-        Some((
-            ChoicePoint {
-                assertions: asrl,
-                environment: env,
-                clause: gs,
-                depth: n,
-            },
-            cs,
-        )) => env.solve(cs.to_vec(), kb, asrl, gs.clone(), *n),
+        Some(ChoicePoint {
+            assertions: asrl,
+            environment: env,
+            clause: gs,
+            depth: n,
+        }) => env.solve(ch, &kb, &asrl, gs.clone(), n),
     }
 }
 
@@ -413,7 +410,7 @@ pub fn solve_toplevel(interactive: bool, kb: &[Assertion], c: Clause) -> Vec<Str
                 }
                 break;
             }
-            Ok(Solution::Continuation(ref answer, (ref kb, ref ch))) => {
+            Ok(Solution::Continuation(answer, (kb, ch))) => {
                 found = true;
 
                 print!("{}", answer);
