@@ -348,18 +348,17 @@ fn renumber_term(n: usize, t: &Term) -> Term {
 
 fn renumber_atom(n: usize, a: &Atom) -> Atom {
     let mut a = a.clone();
-    let mut next_atoms = renumber_atom_level(n, &mut a);
+    let mut next_atoms = Vec::new();
+    renumber_atom_level(n, &mut a, &mut next_atoms);
 
     while let Some(a) = next_atoms.pop() {
-        next_atoms.extend(renumber_atom_level(n, a));
+        renumber_atom_level(n, a, &mut next_atoms);
     }
 
     a
 }
 
-fn renumber_atom_level(n: usize, a: &mut Atom) -> Vec<&mut Atom> {
-    let mut next = Vec::new();
-
+fn renumber_atom_level<'a>(n: usize, a: &'a mut Atom, next: &mut Vec<&'a mut Atom>) {
     for arg in &mut a.args {
         match arg {
             ref t @ Term::Var(_) => {
@@ -369,8 +368,6 @@ fn renumber_atom_level(n: usize, a: &mut Atom) -> Vec<&mut Atom> {
             _ => (),
         }
     }
-
-    next
 }
 
 fn continue_search(kb: Vec<Assertion>, mut ch: Vec<ChoicePoint>) -> Result<Solution, SolveErr> {
