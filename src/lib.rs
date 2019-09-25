@@ -26,7 +26,7 @@ enum SolveErr {
 #[derive(Debug, Clone)]
 enum Solution {
     Answer(String),
-    Continuation(String, (KnowledgeBase, Vec<ChoicePoint>)),
+    Continuation(String, Vec<ChoicePoint>),
 }
 
 #[derive(Debug, Clone)]
@@ -308,7 +308,7 @@ impl Environment {
             (answer, []) => Solution::Answer(String::from(answer)),
             (answer, ch) => {
                 let answer = if answer == "Yes" { "Yes " } else { answer };
-                Solution::Continuation(String::from(answer), (kb.to_vec(), ch.to_vec()))
+                Solution::Continuation(String::from(answer), ch.to_vec())
             }
         })
     }
@@ -370,7 +370,7 @@ fn renumber_atom_level<'a>(n: usize, a: &'a mut Atom, next: &mut Vec<&'a mut Ato
     }
 }
 
-fn continue_search(kb: Vec<Assertion>, mut ch: Vec<ChoicePoint>) -> Result<Solution, SolveErr> {
+fn continue_search(kb: &[Assertion], mut ch: Vec<ChoicePoint>) -> Result<Solution, SolveErr> {
     match ch.pop() {
         None => Err(SolveErr::NoSolution),
         Some(ChoicePoint {
@@ -378,7 +378,7 @@ fn continue_search(kb: Vec<Assertion>, mut ch: Vec<ChoicePoint>) -> Result<Solut
             environment: env,
             clause: gs,
             depth: n,
-        }) => env.solve(ch, &kb, &asrl, gs, n),
+        }) => env.solve(ch, kb, &asrl, gs, n),
     }
 }
 
@@ -399,7 +399,7 @@ pub fn solve_toplevel(interactive: bool, kb: &[Assertion], c: Clause) -> Vec<Str
                 }
                 break;
             }
-            Ok(Solution::Continuation(answer, (kb, ch))) => {
+            Ok(Solution::Continuation(answer, ch)) => {
                 found = true;
 
                 print!("{}", answer);
