@@ -64,8 +64,8 @@ impl Environment {
         Environment(HashMap::new())
     }
 
-    fn insert(&mut self, x: &Var, t: &Term) {
-        self.0.insert(x.clone(), t.clone());
+    fn insert(&mut self, x: Var, t: Term) {
+        self.0.insert(x, t);
     }
 
     fn env(mut self, map: HashMap<Var, Term>) -> Self {
@@ -129,15 +129,14 @@ impl Environment {
     fn unify_terms(&self, t1: &Term, t2: &Term) -> Result<Self, UnifyErr> {
         match (self.substitute_term(t1), self.substitute_term(t2)) {
             (ref t1, ref t2) if t1 == t2 => Ok(self.clone()),
-            (Term::Var(ref y), ref t) | (ref t, Term::Var(ref y)) => {
-                if occurs(y, t) {
+            (Term::Var(y), t) | (t, Term::Var(y)) => {
+                if occurs(&y, &t) {
                     return Err(UnifyErr::NoUnify);
                 }
 
-                let (v, t) = (y.clone(), t.clone());
                 let mut env = Environment::new().env(self.0.clone());
 
-                env.insert(&v, &t);
+                env.insert(y, t);
 
                 Ok(env)
             }
