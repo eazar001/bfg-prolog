@@ -306,9 +306,9 @@ impl Environment {
 
         Ok(match (&env.to_string()[..], &ch[..]) {
             (answer, []) => Solution::Answer(String::from(answer)),
-            (answer, ch) => {
+            (answer, _) => {
                 let answer = if answer == "Yes" { "Yes " } else { answer };
-                Solution::Continuation(String::from(answer), ch.to_vec())
+                Solution::Continuation(String::from(answer), ch)
             }
         })
     }
