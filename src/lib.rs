@@ -126,16 +126,15 @@ impl Environment {
         }
     }
 
-    fn unify_terms(&self, t1: &Term, t2: &Term) -> Result<Self, UnifyErr> {
+    fn unify_terms(self, t1: &Term, t2: &Term) -> Result<Self, UnifyErr> {
         match (self.substitute_term(t1), self.substitute_term(t2)) {
-            (ref t1, ref t2) if t1 == t2 => Ok(self.clone()),
+            (ref t1, ref t2) if t1 == t2 => Ok(self),
             (Term::Var(y), t) | (t, Term::Var(y)) => {
                 if occurs(&y, &t) {
                     return Err(UnifyErr::NoUnify);
                 }
 
-                let mut env = Environment::new().env(self.0.clone());
-
+                let mut env = self;
                 env.insert(y, t);
 
                 Ok(env)
@@ -414,7 +413,7 @@ pub fn solve_toplevel(interactive: bool, kb: &[Assertion], c: Clause) -> Vec<Str
 
                 print!("{}", answer);
                 if !interactive {
-                    answers.push(answer.clone())
+                    answers.push(answer)
                 }
 
                 std::io::stdout().flush().expect("Could not flush stdout");
