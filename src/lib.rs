@@ -387,8 +387,8 @@ fn continue_search(kb: Vec<Assertion>, mut ch: Vec<ChoicePoint>) -> Result<Solut
 
 pub fn solve_toplevel(interactive: bool, kb: &[Assertion], c: Clause) -> Vec<String> {
     let env = Environment::new();
-    let asrl = kb.to_vec();
-    let mut s = env.solve(Vec::new(), kb, &asrl, c, 1);
+    let asrl = kb;
+    let mut s = env.solve(Vec::new(), kb, asrl, c, 1);
     let mut answers = Vec::new();
     let mut found = false;
 
