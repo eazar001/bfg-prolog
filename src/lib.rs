@@ -68,11 +68,6 @@ impl Environment {
         self.0.insert(x, t);
     }
 
-    fn env(mut self, map: HashMap<Var, Term>) -> Self {
-        self.0 = map;
-        self
-    }
-
     fn lookup(&self, x: &Var) -> Term {
         match self.0.get(x) {
             Some(t) => t.clone(),
@@ -170,7 +165,7 @@ impl Environment {
     }
 
     fn unify_list_level<'a>(
-        &self,
+        self,
         l1: &'a [Term],
         l2: &'a [Term],
         next_atoms: &mut Vec<(&'a Atom, &'a Atom)>,
@@ -180,7 +175,7 @@ impl Environment {
         }
 
         let terms = l1.iter().zip(l2.iter());
-        let mut env = self.clone();
+        let mut env = self;
 
         for (t1, t2) in terms {
             if let (Term::Atom(ref a1), Term::Atom(ref a2)) = (t1, t2) {
