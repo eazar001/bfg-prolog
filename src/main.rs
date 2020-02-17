@@ -35,7 +35,10 @@ fn main() {
 
 fn read_source_code(path: &str) -> Vec<Assertion> {
     let s = read_to_string(String::from(path)).unwrap();
-    parse_code(&s)
+    let mut source = parse_code(&s);
+    source.reverse();
+
+    source
 }
 
 fn parse_code(code: &str) -> Vec<Assertion> {

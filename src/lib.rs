@@ -513,7 +513,7 @@ mod tests {
     #[test]
     fn test_unify_3_succeeds() {
         let x = Term::Var(Var::new("X", 0));
-        let y = Term::Var(Var::new("Y", 0));;
+        let y = Term::Var(Var::new("Y", 0));
 
         let env = Environment::new().unify_terms(&x, &y);
         unification_result(&env.unwrap(), &mut [(Var::new("X", 0), y)]);
@@ -522,7 +522,7 @@ mod tests {
     #[test]
     fn test_unify_4_succeeds() {
         let x1 = Term::Var(Var::new("X", 0));
-        let x2 = Term::Var(Var::new("X", 0));;
+        let x2 = Term::Var(Var::new("X", 0));
 
         let env = Environment::new().unify_terms(&x1, &x2);
         unification_result(&env.unwrap(), &mut []);
