@@ -249,8 +249,8 @@ impl Machine {
 
     pub fn get_register(&self, register: Register) -> Option<&Cell> {
         match register {
-            Register::X(xi) => self.get_x(xi),
-            Register::Y(yi) => self.get_y(yi),
+            X(xi) => self.get_x(xi),
+            Y(yi) => self.get_y(yi),
         }
     }
 
@@ -270,8 +270,8 @@ impl Machine {
 
     fn insert_register(&mut self, register: Register, cell: Cell) {
         match register {
-            Register::X(xi) => self.insert_x(xi, cell),
-            Register::Y(yi) => self.insert_y(yi, cell),
+            X(xi) => self.insert_x(xi, cell),
+            Y(yi) => self.insert_y(yi, cell),
         }
     }
 
@@ -411,7 +411,7 @@ impl Machine {
         match self.mode {
             Read => {
                 let s = self.registers.s;
-                self.unify(Store::Register(xi), Store::HeapAddr(s))
+                self.unify(Store::Register(xi), HeapAddr(s))
             }
             Write => {
                 self.heap.push(self.get_register(xi).cloned().unwrap());
@@ -492,7 +492,7 @@ impl Machine {
 
 impl Register {
     fn is_x(&self) -> bool {
-        if let Register::X(_) = self {
+        if let X(_) = self {
             return true;
         }
 
@@ -501,8 +501,8 @@ impl Register {
 
     fn address(&self) -> usize {
         match self {
-            Register::X(a) => *a,
-            Register::Y(a) => *a,
+            X(a) => *a,
+            Y(a) => *a,
         }
     }
 }
@@ -578,7 +578,7 @@ fn allocate_query_registers(
     }
 
     for t in &structure.args {
-        if let Term::Structure(ref s) = t {
+        if let Term::Structure(s) = t {
             allocate_query_registers(s, x, m, seen, instructions);
         }
     }
@@ -650,7 +650,7 @@ fn allocate_program_registers(
     }
 
     for t in &structure.args {
-        if let Term::Structure(ref s) = t {
+        if let Term::Structure(s) = t {
             allocate_program_registers(false, s, x, m, seen, arg_instructions, instructions);
         }
     }
@@ -892,13 +892,13 @@ pub fn find_solutions(solvent_args: &[Term], other_args: &[Term]) -> Bindings {
         if let Term::Var(Var(v)) = t {
             let mut chars: Vec<_> = v.chars().take(3).collect();
 
-            if chars.len() < 3 {
-                return false;
+            return if chars.len() < 3 {
+                false
             } else {
-                return chars[0] == '_'
+                chars[0] == '_'
                     && chars[1] == 'H'
                     && chars[2] != '0'
-                    && chars[2].is_ascii_digit();
+                    && chars[2].is_ascii_digit()
             }
         }
 

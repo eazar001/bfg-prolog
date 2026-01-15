@@ -61,7 +61,7 @@ impl Structuralize for Structure {
         for t in &self.args {
             match t {
                 Term::Atom(a) => args.push(Term::Structure(a.structuralize().unwrap())),
-                Term::Structure(ref s) => {
+                Term::Structure(s) => {
                     args.push(Term::Structure(s.structuralize().unwrap()));
                 }
                 _ => args.push(t.clone()),
