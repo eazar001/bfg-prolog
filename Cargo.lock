@@ -78,7 +78,6 @@ dependencies = [
  "lalrpop",
  "lalrpop-util",
  "log",
- "regex",
 ]
 
 [[package]]
