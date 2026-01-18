@@ -931,14 +931,14 @@ pub fn find_solutions(solvent_args: &[Term], other_args: &[Term]) -> Bindings {
 fn show_cell(machine: &Machine, address: Store) -> String {
     let d = machine.get_store_cell(machine.deref(address));
 
-    match d.clone() {
-        Ref(a) => match &machine.heap[a] {
-            Ref(v) if *v == a => format!("_H{}", v),
-            r @ Ref(_) => show_cell(machine, HeapAddr(a)),
-            _ => show_cell(machine, HeapAddr(a)),
+    match d {
+        Ref(a) => match &machine.heap[*a] {
+            Ref(v) if *v == *a => format!("_H{}", v),
+            r @ Ref(_) => show_cell(machine, HeapAddr(*a)),
+            _ => show_cell(machine, HeapAddr(*a)),
         },
         Str(a) => {
-            let cell = Str(a);
+            let cell = Str(*a);
             let Functor(name, arity) = machine.get_functor(&cell).clone();
 
             if arity == 0 {
