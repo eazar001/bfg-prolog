@@ -101,8 +101,8 @@ enum Frame {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 struct Registers {
-    h: HeapAddress,
-    x: Vec<Option<Cell>>,
+    h: HeapAddress,           // heap pointer
+    x: Vec<Option<Cell>>,     // variable registers (x0, x1, ..., xn)
     s: Address,
     p: Address,
     cp: Address,
