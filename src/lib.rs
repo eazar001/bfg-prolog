@@ -1008,20 +1008,7 @@ mod tests {
         );
         assert_eq!(
             machine.heap,
-            vec![
-                Str(1),
-                Func(Functor(FunctorName::from("h"), 2)),
-                Ref(2),
-                Ref(3),
-                Str(5),
-                Func(Functor(FunctorName::from("f"), 1)),
-                Ref(3),
-                Str(8),
-                Func(Functor(FunctorName::from("p"), 3)),
-                Ref(2),
-                Str(1),
-                Str(5)
-            ]
+            figure_2_1_heap_representation()
         )
     }
 
@@ -1353,6 +1340,23 @@ mod tests {
             Func(Functor::from("f/2")),
             Str(11),
             Str(3),
+        ]
+    }
+
+    fn figure_2_1_heap_representation() -> Vec<Cell> {
+        vec![
+            Str(1),
+            Func(Functor::from("h/2")),
+            Ref(2),
+            Ref(3),
+            Str(5),
+            Func(Functor::from("f/1")),
+            Ref(3),
+            Str(8),
+            Func(Functor::from("p/3")),
+            Ref(2),
+            Str(1),
+            Str(5)
         ]
     }
 }
