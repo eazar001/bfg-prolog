@@ -1006,6 +1006,23 @@ mod tests {
             "p(_H2, h(_H2, _H3), f(_H3))",
             show_cell(&machine, HeapAddr(7))
         );
+        assert_eq!(
+            machine.heap,
+            vec![
+                Str(1),
+                Func(Functor(FunctorName::from("h"), 2)),
+                Ref(2),
+                Ref(3),
+                Str(5),
+                Func(Functor(FunctorName::from("f"), 1)),
+                Ref(3),
+                Str(8),
+                Func(Functor(FunctorName::from("p"), 3)),
+                Ref(2),
+                Str(1),
+                Str(5)
+            ]
+        )
     }
 
     #[test]
