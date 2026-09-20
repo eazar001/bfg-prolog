@@ -610,63 +610,6 @@ fn emit_query_instructions(
     }
 }
 
-fn allocate_program_registers(
-    root: bool,
-    structure: &Structure,
-    x: &mut usize,
-    m: &mut TermMap,
-    seen: &mut TermSet,
-    arg_instructions: &mut Instructions,
-    instructions: &mut Instructions,
-) {
-    let term = Term::Structure(structure.clone());
-
-    if !m.contains_key(&term) {
-        m.insert(term, X(*x));
-        *x += 1;
-    }
-
-    for t in &structure.args {
-        if !m.contains_key(&t) {
-            m.insert(t.clone(), X(*x));
-            *x += 1;
-        }
-    }
-
-    let f = Functor(structure.name.clone(), structure.arity);
-    let t = Term::Structure(structure.clone());
-
-    if root {
-        arg_instructions.push(Instruction::GetStructure(f, *m.get(&t).unwrap()));
-    } else {
-        instructions.push(Instruction::GetStructure(f, *m.get(&t).unwrap()));
-    }
-
-    seen.insert(t);
-
-    for t in &structure.args {
-        if !seen.contains(t) {
-            if root {
-                arg_instructions.push(Instruction::UnifyVariable(*m.get(t).unwrap()));
-            } else {
-                instructions.push(Instruction::UnifyVariable(*m.get(t).unwrap()));
-            }
-
-            seen.insert(t.clone());
-        } else if root {
-            arg_instructions.push(Instruction::UnifyValue(*m.get(t).unwrap()));
-        } else {
-            instructions.push(Instruction::UnifyValue(*m.get(t).unwrap()));
-        }
-    }
-
-    for t in &structure.args {
-        if let Term::Structure(s) = t {
-            allocate_program_registers(false, s, x, m, seen, arg_instructions, instructions);
-        }
-    }
-}
-
 fn compile_query(term: &Structure, m: &mut TermMap, seen: &mut TermSet) -> Instructions {
     let mut structures = Vec::new();
     let mut instructions = Vec::new();
@@ -678,48 +621,68 @@ fn compile_query(term: &Structure, m: &mut TermMap, seen: &mut TermSet) -> Instr
     instructions
 }
 
-fn compile_fact<T: Structuralize>(term: &T, m: &mut TermMap, seen: &mut TermSet) -> Instructions {
-    let mut arg_instructions = Vec::new();
+fn compile_fact(term: &Structure, m: &mut TermMap, seen: &mut TermSet) -> Instructions {
+    let mut structures = Vec::new();
     let mut instructions = Vec::new();
+    let mut x = 1;
 
-    let structure = term.structuralize().unwrap();
+    allocate_program_registers(term, &mut x, m, &mut structures);
+    emit_program_instructions(&mut structures, m, seen, &mut instructions);
 
-    for (i, arg) in structure.args.iter().enumerate() {
-        let a = i + 1;
-        let mut x = a + structure.arity;
+    instructions
+}
 
-        if let Term::Var(_) = arg {
-            if !seen.contains(arg) {
-                if m.contains_key(arg) {
-                    arg_instructions.push(Instruction::GetVariable(*m.get(&arg).unwrap(), X(a)));
-                } else {
-                    arg_instructions.push(Instruction::GetVariable(X(x), X(a)));
-                    m.insert(arg.clone(), X(x));
-                }
+fn allocate_program_registers(
+    structure: &Structure,
+    x: &mut usize,
+    m: &mut TermMap,
+    structures: &mut Vec<Structure>,
+) {
+    let term = Term::Structure(structure.clone());
+    structures.push(structure.clone());
 
-                seen.insert(arg.clone());
-            } else {
-                arg_instructions.push(Instruction::GetValue(*m.get(arg).unwrap(), X(a)));
-            }
-        } else {
-            m.insert(arg.clone(), X(a));
-            seen.insert(arg.clone());
-            allocate_program_registers(
-                true,
-                &arg.structuralize().unwrap(),
-                &mut x,
-                m,
-                seen,
-                &mut arg_instructions,
-                &mut instructions,
-            );
+    if !m.contains_key(&term) {
+        m.insert(term, X(*x));
+        *x += 1;
+    }
+
+    for t in &structure.args {
+        if !m.contains_key(t) {
+            m.insert(t.clone(), X(*x));
+            *x += 1;
         }
     }
 
-    instructions.push(Instruction::Proceed);
-    arg_instructions.extend_from_slice(&instructions);
+    for t in &structure.args {
+        if let Term::Structure(s) = t {
+            allocate_program_registers(s, x, m, structures);
+        }
+    }
+}
 
-    arg_instructions
+fn emit_program_instructions(
+    structures: &mut Vec<Structure>,
+    m: &mut TermMap,
+    seen: &mut TermSet,
+    instructions: &mut Instructions
+) {
+    for structure in structures {
+        let f = Functor(structure.name.clone(), structure.arity);
+        let t = Term::Structure(structure.clone());
+
+        instructions.push(Instruction::GetStructure(f, *m.get(&t).unwrap()));
+        seen.insert(t);
+
+        for t in &structure.args {
+            if !seen.contains(t) {
+                instructions.push(Instruction::UnifyVariable(*m.get(t).unwrap()));
+                seen.insert(t.clone());
+                continue;
+            }
+
+            instructions.push(Instruction::UnifyValue(*m.get(t).unwrap()));
+        }
+    }
 }
 
 fn find_variables(term: &Term, vars: &mut Vec<Var>) {
@@ -806,31 +769,31 @@ fn collect_permanent_variables(rule: &Rule) -> TermMap {
     vars
 }
 
-fn compile_rule(rule: &Rule, m: &mut TermMap, seen: &mut TermSet) -> Instructions {
-    let mut body_instructions = Vec::new();
-    let y_map = collect_permanent_variables(rule);
-    let n = y_map.len();
-
-    m.extend(y_map);
-
-    let Rule { head: term, body } = rule;
-    let head = Term::Structure(term.clone());
-    let head_instructions = compile_fact(&head, m, seen);
-    let head_slice = &head_instructions[..head_instructions.len() - 1];
-
-    let mut head_instructions = vec![Instruction::Allocate(n)];
-    head_instructions.extend_from_slice(head_slice);
-
-    for body_term in body {
-        let body_term_instructions = compile_query(body_term, m, seen);
-        body_instructions.extend(body_term_instructions);
-    }
-
-    body_instructions.push(Instruction::Deallocate);
-    head_instructions.extend(body_instructions);
-
-    head_instructions
-}
+// fn compile_rule(rule: &Rule, m: &mut TermMap, seen: &mut TermSet) -> Instructions {
+//     let mut body_instructions = Vec::new();
+//     let y_map = collect_permanent_variables(rule);
+//     let n = y_map.len();
+//
+//     m.extend(y_map);
+//
+//     let Rule { head: term, body } = rule;
+//     let head = Term::Structure(term.clone());
+//     let head_instructions = compile_fact(&head, m, seen);
+//     let head_slice = &head_instructions[..head_instructions.len() - 1];
+//
+//     let mut head_instructions = vec![Instruction::Allocate(n)];
+//     head_instructions.extend_from_slice(head_slice);
+//
+//     for body_term in body {
+//         let body_term_instructions = compile_query(body_term, m, seen);
+//         body_instructions.extend(body_term_instructions);
+//     }
+//
+//     body_instructions.push(Instruction::Deallocate);
+//     head_instructions.extend(body_instructions);
+//
+//     head_instructions
+// }
 
 pub fn compare_terms(
     solvent_term: &Term,
@@ -1047,6 +1010,7 @@ mod tests {
         let mut program_set = TermSet::new();
 
         let query_instructions = compile_query(&query.structuralize().unwrap(), &mut query_allocation, &mut query_set);
+        let program_instructions = compile_fact(&program.structuralize().unwrap(), &mut program_allocation, &mut program_set);
 
         let expected_query_instructions = vec![
             Instruction::PutStructure(Functor::from("f/1"), X(2)),
@@ -1076,6 +1040,8 @@ mod tests {
             Instruction::GetStructure(Functor::from("f/1"), X(4)),
             Instruction::UnifyValue(X(5)),
         ];
+
+        assert_eq!(program_instructions, expected_program_instructions);
     }
 
     #[test]
@@ -1091,8 +1057,7 @@ mod tests {
         let mut program_set = TermSet::new();
 
         let query_instructions = compile_query(&query.structuralize().unwrap(), &mut query_allocation, &mut query_set);
-        let program_instructions =
-            compile_fact(&program, &mut program_allocation, &mut program_set);
+        let program_instructions = compile_fact(&program.structuralize().unwrap(), &mut program_allocation, &mut program_set);
 
         machine.push_instructions(&CodeType::Query(Functor::from("p/3")), &query_instructions);
         machine.push_instructions(&CodeType::Fact(Functor::from("p/3")), &program_instructions);
@@ -1157,7 +1122,7 @@ mod tests {
         let mut program_set = TermSet::new();
 
         let query_instructions = compile_query(&q.structuralize().unwrap(), &mut query_allocation, &mut query_set);
-        let program_instructions = compile_fact(&p, &mut program_allocation, &mut program_set);
+        let program_instructions = compile_fact(&p.structuralize().unwrap(), &mut program_allocation, &mut program_set);
 
         let expected_query_instructions = vec![
             Instruction::PutStructure(Functor::from("f/1"), X(1)),
@@ -1198,8 +1163,7 @@ mod tests {
         let mut program_set = TermSet::new();
 
         let query_instructions = compile_query(&query.structuralize().unwrap(), &mut query_allocation, &mut query_set);
-        let program_instructions =
-            compile_fact(&program, &mut program_allocation, &mut program_set);
+        let program_instructions = compile_fact(&program.structuralize().unwrap(), &mut program_allocation, &mut program_set);
 
         machine.push_instructions(&CodeType::Query(Functor::from("p/3")), &query_instructions);
         machine.push_instructions(&CodeType::Fact(Functor::from("p/3")), &program_instructions);
