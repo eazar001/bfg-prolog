@@ -571,7 +571,7 @@ fn allocate_query_registers(
     }
 
     for t in &structure.args {
-        if !m.contains_key(&t) {
+        if !m.contains_key(t) {
             m.insert(t.clone(), X(*x));
             *x += 1;
         }
@@ -593,9 +593,10 @@ fn allocate_query_registers(
         if !seen.contains(t) {
             instructions.push(Instruction::SetVariable(*m.get(t).unwrap()));
             seen.insert(t.clone());
-        } else {
-            instructions.push(Instruction::SetValue(*m.get(t).unwrap()));
+            continue;
         }
+        
+        instructions.push(Instruction::SetValue(*m.get(t).unwrap()));
     }
 }
 
@@ -656,45 +657,22 @@ fn allocate_program_registers(
     }
 }
 
-fn compile_query<T: Structuralize>(term: &T, m: &mut TermMap, seen: &mut TermSet) -> Instructions {
+fn compile_query(term: &Structure, m: &mut TermMap, seen: &mut TermSet) -> Instructions {
     let mut instructions = Vec::new();
 
     let structure = term.structuralize().unwrap();
 
-    for (i, arg) in structure.args.iter().enumerate() {
-        let a = i + 1;
-        let mut x = a + structure.arity;
+    m.insert(Term::Structure(term.clone()), X(1));
+    seen.insert(Term::Structure(term.clone()));
+    let mut x = 2;
 
-        if let Term::Var(_) = arg {
-            if !seen.contains(arg) {
-                if m.contains_key(arg) {
-                    instructions.push(Instruction::PutVariable(*m.get(&arg).unwrap(), X(a)));
-                } else {
-                    instructions.push(Instruction::PutVariable(X(x), X(a)));
-                    m.insert(arg.clone(), X(x));
-                }
-
-                seen.insert(arg.clone());
-            } else {
-                instructions.push(Instruction::PutValue(*m.get(arg).unwrap(), X(a)));
-            }
-        } else {
-            m.insert(arg.clone(), X(a));
-            seen.insert(arg.clone());
-            allocate_query_registers(
-                &arg.structuralize().unwrap(),
-                &mut x,
-                m,
-                seen,
-                &mut instructions,
-            );
-        }
-    }
-
-    instructions.push(Instruction::Call(Functor(
-        structure.name.clone(),
-        structure.arity,
-    )));
+    allocate_query_registers(
+        &structure,
+        &mut x,
+        m,
+        seen,
+        &mut instructions,
+    );
 
     instructions
 }
@@ -1062,6 +1040,12 @@ mod tests {
         let program = parser.parse("p(Z, h(Z, W), f(W)).").unwrap();
 
         println!("query: {:?}\nprogram: {:?}", query, program);
+        let mut query_allocation = TermMap::new();
+        let mut query_set = TermSet::new();
+        let mut program_allocation = TermMap::new();
+        let mut program_set = TermSet::new();
+
+        let query_instructions = compile_query(&query.structuralize().unwrap(), &mut query_allocation, &mut query_set);
 
         let expected_query_instructions = vec![
             Instruction::PutStructure(Functor::from("f/1"), X(2)),
@@ -1077,6 +1061,8 @@ mod tests {
             Instruction::SetValue(X(3)),
             Instruction::SetValue(X(4)),
         ];
+
+        assert_eq!(query_instructions, expected_query_instructions);
 
         let expected_program_instructions = vec![
             Instruction::GetStructure(Functor::from("p/3"), X(1)),
@@ -1103,7 +1089,7 @@ mod tests {
         let mut program_allocation = TermMap::new();
         let mut program_set = TermSet::new();
 
-        let query_instructions = compile_query(&query, &mut query_allocation, &mut query_set);
+        let query_instructions = compile_query(&query.structuralize().unwrap(), &mut query_allocation, &mut query_set);
         let program_instructions =
             compile_fact(&program, &mut program_allocation, &mut program_set);
 
@@ -1169,7 +1155,7 @@ mod tests {
         let mut query_set = TermSet::new();
         let mut program_set = TermSet::new();
 
-        let query_instructions = compile_query(&q, &mut query_allocation, &mut query_set);
+        let query_instructions = compile_query(&q.structuralize().unwrap(), &mut query_allocation, &mut query_set);
         let program_instructions = compile_fact(&p, &mut program_allocation, &mut program_set);
 
         let expected_query_instructions = vec![
@@ -1210,7 +1196,7 @@ mod tests {
         let mut query_set = TermSet::new();
         let mut program_set = TermSet::new();
 
-        let query_instructions = compile_query(&query, &mut query_allocation, &mut query_set);
+        let query_instructions = compile_query(&query.structuralize().unwrap(), &mut query_allocation, &mut query_set);
         let program_instructions =
             compile_fact(&program, &mut program_allocation, &mut program_set);
 
