@@ -560,8 +560,7 @@ fn allocate_query_registers(
     structure: &Structure,
     x: &mut usize,
     m: &mut TermMap,
-    seen: &mut TermSet,
-    instructions: &mut Instructions,
+    structures: &mut Vec<Structure>,
 ) {
     let term = Term::Structure(structure.clone());
 
@@ -579,24 +578,35 @@ fn allocate_query_registers(
 
     for t in &structure.args {
         if let Term::Structure(s) = t {
-            allocate_query_registers(s, x, m, seen, instructions);
+            allocate_query_registers(s, x, m, structures);
         }
     }
 
-    let f = Functor(structure.name.clone(), structure.arity);
-    let t = Term::Structure(structure.clone());
+    structures.push(structure.clone());
+}
 
-    instructions.push(Instruction::PutStructure(f, *m.get(&t).unwrap()));
-    seen.insert(t);
+fn emit_query_instructions(
+    structures: &mut Vec<Structure>,
+    m: &mut TermMap,
+    seen: &mut TermSet,
+    instructions: &mut Instructions
+) {
+    for structure in structures {
+        let f = Functor(structure.name.clone(), structure.arity);
+        let t = Term::Structure(structure.clone());
 
-    for t in &structure.args {
-        if !seen.contains(t) {
-            instructions.push(Instruction::SetVariable(*m.get(t).unwrap()));
-            seen.insert(t.clone());
-            continue;
+        instructions.push(Instruction::PutStructure(f, *m.get(&t).unwrap()));
+        seen.insert(t);
+
+        for t in &structure.args {
+            if !seen.contains(t) {
+                instructions.push(Instruction::SetVariable(*m.get(t).unwrap()));
+                seen.insert(t.clone());
+                continue;
+            }
+
+            instructions.push(Instruction::SetValue(*m.get(t).unwrap()));
         }
-        
-        instructions.push(Instruction::SetValue(*m.get(t).unwrap()));
     }
 }
 
@@ -658,16 +668,12 @@ fn allocate_program_registers(
 }
 
 fn compile_query(term: &Structure, m: &mut TermMap, seen: &mut TermSet) -> Instructions {
+    let mut structures = Vec::new();
     let mut instructions = Vec::new();
     let mut x = 1;
 
-    allocate_query_registers(
-        term,
-        &mut x,
-        m,
-        seen,
-        &mut instructions,
-    );
+    allocate_query_registers(term, &mut x, m, &mut structures);
+    emit_query_instructions(&mut structures, m, seen, &mut instructions);
 
     instructions
 }
