@@ -659,15 +659,10 @@ fn allocate_program_registers(
 
 fn compile_query(term: &Structure, m: &mut TermMap, seen: &mut TermSet) -> Instructions {
     let mut instructions = Vec::new();
-
-    let structure = term.structuralize().unwrap();
-
-    m.insert(Term::Structure(term.clone()), X(1));
-    seen.insert(Term::Structure(term.clone()));
-    let mut x = 2;
+    let mut x = 1;
 
     allocate_query_registers(
-        &structure,
+        term,
         &mut x,
         m,
         seen,
