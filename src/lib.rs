@@ -1147,8 +1147,8 @@ mod tests {
             Instruction::Proceed,
         ];
 
-        assert_eq!(&expected_query_instructions, &query_instructions);
-        assert_eq!(&expected_program_instructions, &program_instructions);
+        assert_eq!(&query_instructions, &expected_query_instructions);
+        assert_eq!(&program_instructions, &expected_program_instructions);
     }
 
     #[test]
