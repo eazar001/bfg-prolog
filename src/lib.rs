@@ -4,15 +4,15 @@
 
 pub mod ast;
 
-use self::ast::*;
 use self::Cell::*;
 use self::Mode::{Read, Write};
 use self::Register::*;
 use self::Store::*;
+use self::ast::*;
 use env_logger;
 use lalrpop_util::lalrpop_mod;
 use log::Level::*;
-use log::{debug, error, info, trace, warn, Level};
+use log::{Level, debug, error, info, trace, warn};
 use std::cmp::Ordering;
 use std::collections::hash_set::Iter;
 use std::collections::{HashMap, HashSet};
@@ -101,8 +101,8 @@ enum Frame {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 struct Registers {
-    h: HeapAddress,           // heap pointer
-    x: Vec<Option<Cell>>,     // variable registers (x0, x1, ..., xn)
+    h: HeapAddress,       // heap pointer
+    x: Vec<Option<Cell>>, // variable registers (x0, x1, ..., xn)
     s: Address,
     p: Address,
     cp: Address,
@@ -564,17 +564,13 @@ fn allocate_query_registers(
 ) {
     let term = Term::Structure(structure.clone());
 
-    if !m.contains_key(&term) {
-        m.insert(term, X(*x));
+    m.entry(term).or_insert_with(|| {
+        let reg = X(*x);
         *x += 1;
-    }
+        reg
+    });
 
-    for t in &structure.args {
-        if !m.contains_key(t) {
-            m.insert(t.clone(), X(*x));
-            *x += 1;
-        }
-    }
+    build_term_map(structure, m, x);
 
     for t in &structure.args {
         if let Term::Structure(s) = t {
@@ -585,11 +581,21 @@ fn allocate_query_registers(
     structures.push(structure.clone());
 }
 
+fn build_term_map(s: &Structure, m: &mut TermMap, x: &mut usize) {
+    for t in &s.args {
+        m.entry(t.clone()).or_insert_with(|| {
+            let reg = X(*x);
+            *x += 1;
+            reg
+        });
+    }
+}
+
 fn emit_query_instructions(
     structures: &mut Vec<Structure>,
     m: &mut TermMap,
     seen: &mut TermSet,
-    instructions: &mut Instructions
+    instructions: &mut Instructions,
 ) {
     for structure in structures {
         let f = Functor(structure.name.clone(), structure.arity);
@@ -641,17 +647,13 @@ fn allocate_program_registers(
     let term = Term::Structure(structure.clone());
     structures.push(structure.clone());
 
-    if !m.contains_key(&term) {
-        m.insert(term, X(*x));
+    m.entry(term).or_insert_with(|| {
+        let reg = X(*x);
         *x += 1;
-    }
+        reg
+    });
 
-    for t in &structure.args {
-        if !m.contains_key(t) {
-            m.insert(t.clone(), X(*x));
-            *x += 1;
-        }
-    }
+    build_term_map(structure, m, x);
 
     for t in &structure.args {
         if let Term::Structure(s) = t {
@@ -664,7 +666,7 @@ fn emit_program_instructions(
     structures: &mut Vec<Structure>,
     m: &mut TermMap,
     seen: &mut TermSet,
-    instructions: &mut Instructions
+    instructions: &mut Instructions,
 ) {
     for structure in structures {
         let f = Functor(structure.name.clone(), structure.arity);
@@ -837,11 +839,8 @@ pub fn find_solutions(solvent_args: &[Term], other_args: &[Term]) -> Bindings {
             return if chars.len() < 3 {
                 false
             } else {
-                chars[0] == '_'
-                    && chars[1] == 'H'
-                    && chars[2] != '0'
-                    && chars[2].is_ascii_digit()
-            }
+                chars[0] == '_' && chars[1] == 'H' && chars[2] != '0' && chars[2].is_ascii_digit()
+            };
         }
 
         false
@@ -948,10 +947,7 @@ mod tests {
             "p(_H2, h(_H2, _H3), f(_H3))",
             show_cell(&machine, HeapAddr(7))
         );
-        assert_eq!(
-            machine.heap,
-            figure_2_1_heap_representation()
-        )
+        assert_eq!(machine.heap, figure_2_1_heap_representation())
     }
 
     #[test]
@@ -1009,8 +1005,16 @@ mod tests {
         let mut program_allocation = TermMap::new();
         let mut program_set = TermSet::new();
 
-        let query_instructions = compile_query(&query.structuralize().unwrap(), &mut query_allocation, &mut query_set);
-        let program_instructions = compile_fact(&program.structuralize().unwrap(), &mut program_allocation, &mut program_set);
+        let query_instructions = compile_query(
+            &query.structuralize().unwrap(),
+            &mut query_allocation,
+            &mut query_set,
+        );
+        let program_instructions = compile_fact(
+            &program.structuralize().unwrap(),
+            &mut program_allocation,
+            &mut program_set,
+        );
 
         let expected_query_instructions = vec![
             Instruction::PutStructure(Functor::from("f/1"), X(2)),
@@ -1056,8 +1060,16 @@ mod tests {
         let mut program_allocation = TermMap::new();
         let mut program_set = TermSet::new();
 
-        let query_instructions = compile_query(&query.structuralize().unwrap(), &mut query_allocation, &mut query_set);
-        let program_instructions = compile_fact(&program.structuralize().unwrap(), &mut program_allocation, &mut program_set);
+        let query_instructions = compile_query(
+            &query.structuralize().unwrap(),
+            &mut query_allocation,
+            &mut query_set,
+        );
+        let program_instructions = compile_fact(
+            &program.structuralize().unwrap(),
+            &mut program_allocation,
+            &mut program_set,
+        );
 
         machine.push_instructions(&CodeType::Query(Functor::from("p/3")), &query_instructions);
         machine.push_instructions(&CodeType::Fact(Functor::from("p/3")), &program_instructions);
@@ -1121,8 +1133,16 @@ mod tests {
         let mut query_set = TermSet::new();
         let mut program_set = TermSet::new();
 
-        let query_instructions = compile_query(&q.structuralize().unwrap(), &mut query_allocation, &mut query_set);
-        let program_instructions = compile_fact(&p.structuralize().unwrap(), &mut program_allocation, &mut program_set);
+        let query_instructions = compile_query(
+            &q.structuralize().unwrap(),
+            &mut query_allocation,
+            &mut query_set,
+        );
+        let program_instructions = compile_fact(
+            &p.structuralize().unwrap(),
+            &mut program_allocation,
+            &mut program_set,
+        );
 
         let expected_query_instructions = vec![
             Instruction::PutStructure(Functor::from("f/1"), X(1)),
@@ -1162,8 +1182,16 @@ mod tests {
         let mut query_set = TermSet::new();
         let mut program_set = TermSet::new();
 
-        let query_instructions = compile_query(&query.structuralize().unwrap(), &mut query_allocation, &mut query_set);
-        let program_instructions = compile_fact(&program.structuralize().unwrap(), &mut program_allocation, &mut program_set);
+        let query_instructions = compile_query(
+            &query.structuralize().unwrap(),
+            &mut query_allocation,
+            &mut query_set,
+        );
+        let program_instructions = compile_fact(
+            &program.structuralize().unwrap(),
+            &mut program_allocation,
+            &mut program_set,
+        );
 
         machine.push_instructions(&CodeType::Query(Functor::from("p/3")), &query_instructions);
         machine.push_instructions(&CodeType::Fact(Functor::from("p/3")), &program_instructions);
@@ -1307,7 +1335,7 @@ mod tests {
             Func(Functor::from("p/3")),
             Ref(2),
             Str(1),
-            Str(5)
+            Str(5),
         ]
     }
 }
