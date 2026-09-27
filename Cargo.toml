@@ -1,0 +1,14 @@
+[package]
+name = "bfg-prolog"
+version = "0.1.0"
+authors = ["Ebrahim Azarisooreh <ebrahim.azarisooreh@gmail.com>"]
+edition = "2024"
+
+[build-dependencies]
+lalrpop = "0.22.2"
+
+[dependencies]
+env_logger = "0.11.8"
+log = "0.4.6"
+lalrpop = "0.22.2"
+lalrpop-util = "0.22.2"
